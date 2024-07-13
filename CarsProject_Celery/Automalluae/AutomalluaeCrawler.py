@@ -53,29 +53,29 @@ def crawl_urls():
             )
             if saved_page is not None:
                 data = saved_page['data']
-
+                status = 200
             else:
 
                 base_headers['paging-info'] =f'start-index={start_index}|no-of-records=28'
                 base_headers['authorization'] = f'Bearer {auth_token}'
                 # res = send_req_syphoon(0, 'GET', main_api_url, headers=base_headers)
-                res = requests.get(main_api_url,headers=base_headers)
-            
+                res = send_req_syphoon(PROXY_VENDOR, 'GET', main_api_url,headers=base_headers)
+                status = res.status_code
                 data = res.json()
 
-            cache_collection.insert_one(
-                    {
-                        'input': {
-                            'url': main_api_url,
-                            'page': start_index
-                        },
-                        'data': data,
-                        'updated_at': datetime.now(),
-                        'data_format': 'json',
-                        'info_type': 'crawl',
-                        'info_subtype': 'url_crawl',
-                    }
-                )
+                cache_collection.insert_one(
+                        {
+                            'input': {
+                                'url': main_api_url,
+                                'page': start_index
+                            },
+                            'data': data,
+                            'updated_at': datetime.now(),
+                            'data_format': 'json',
+                            'info_type': 'crawl',
+                            'info_subtype': 'url_crawl',
+                        }
+                    )
             if len(data) == 0: break
             start_index += len(data)
 
@@ -100,6 +100,8 @@ def crawl_urls():
                   
                     'url': main_api_url,
                     'page': start_index,
+                    'status': status,
+                    'date_time': datetime.now(),
                     'error': str(ex),
                     'traceback': traceback.format_exc(),
                 }

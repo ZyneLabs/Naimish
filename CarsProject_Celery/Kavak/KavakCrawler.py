@@ -46,6 +46,7 @@ def crawl_main_page():
     try:
        
         res = send_req_syphoon(PROXY_VENDOR, 'GET', 'https://www.kavak.com/ae/preowned')
+        status = res.status_code
         res.raise_for_status()
         soup = BeautifulSoup(res.text, 'lxml') 
         
@@ -62,6 +63,8 @@ def crawl_main_page():
             {
                 'url': 'https://www.kavak.com/ae/preowned',
                 'page': 0,
+                'status': status,
+                'date_time': datetime.now(),
                 'error': str(ex),
                 'traceback': traceback.format_exc(),
             }
@@ -76,6 +79,7 @@ def crawl_urls(page):
         
         if cache_data is not None:
             data = cache_data['data']
+            status = 200
 
         else:
             res = send_req_syphoon(
@@ -83,7 +87,7 @@ def crawl_urls(page):
                 method="GET",
                 url=req_url,
             )
-
+            status = res.status_code
             res.raise_for_status()
 
             data = res.text
@@ -96,6 +100,8 @@ def crawl_urls(page):
             {
                 'url': req_url,
                 'page': page,
+                'status': status,
+                'date_time': datetime.now(),
                 'error': str(ex),
                 'traceback': traceback.format_exc(),
             }

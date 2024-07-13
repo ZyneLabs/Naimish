@@ -20,9 +20,9 @@ def crawl_from_brands():
             status = 200
         else:
             req = send_req_syphoon(PROXY_VENDOR, 'GET', 'https://uae.yallamotor.com/used-cars')
-            req.raise_for_status()
-
             html,status = req.text,req.status_code
+
+            req.raise_for_status()
             cache_collection.insert_one({'url': 'https://uae.yallamotor.com/used-cars', 'data': html, 'page': 'brands'})
 
         soup = BeautifulSoup(html, 'html.parser')
@@ -50,9 +50,9 @@ def crawl_page(brand_url,page=1):
             status = 200
         else:
             req = send_req_syphoon(PROXY_VENDOR, 'GET', brand_url+f'?page={page}&sort=updated_desc')
-            req.raise_for_status()
-
             html,status = req.text,req.status_code
+
+            req.raise_for_status()
             cache_collection.insert_one({'url': brand_url, 'data': html, 'page': page})
 
         soup = BeautifulSoup(html, 'html.parser')
@@ -79,6 +79,7 @@ def crawl_page(brand_url,page=1):
                 'url': brand_url,
                 'page': page,
                 'status': status,
+                'date_time': datetime.now(),
                 'error': str(ex),
                 'traceback': traceback.format_exc(),
             })

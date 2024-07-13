@@ -61,8 +61,10 @@ def crawl_urls(category_url,page ):
 
         if cache_data is not None:
             data = cache_data['data']
+            status = 200
         else:
             res = send_req_syphoon(PROXY_VENDOR, 'GET', category_url+f'?page={page}')   
+            status = res.status_code
             res.raise_for_status()
             data = res.text
             save_cache_for(category_url,page,data)
@@ -74,6 +76,7 @@ def crawl_urls(category_url,page ):
             {
                 'url': category_url,
                 'page': page,
+                'status': status,
                 'error': str(ex),
                 'traceback': traceback.format_exc(),
             }

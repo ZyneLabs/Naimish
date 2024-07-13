@@ -116,7 +116,7 @@ def cars24_parser(url):
         product_collection.update_one({'url':url},{'$set':{'scraped':1}})
     
     except Exception as e:
-        error_collection.insert_one({'url':url, 'status':req_status, 'error':str(e), 'traceback':traceback.format_exc()})
+        error_collection.insert_one({'url':url, 'status':req_status,'date_time': datetime.now(), 'error':str(e), 'traceback':traceback.format_exc()})
     
 @celery_app.task(queue='cars24')
 def start_scraper():

@@ -26,11 +26,13 @@ def crawl_urls():
             
             if cached_data is not None:
                 data = cached_data['data']
+                status = 200
             else:
                 res = requests.get(
                     url=req_url,
                     headers=headers
                 )
+                status = res.status_code
                 data = res.json()
                 cache_collection.insert_one(
                     {
@@ -62,7 +64,7 @@ def crawl_urls():
             page += 1
 
     except Exception as ex:
-        error_collection.insert_one({'parent_category_code': parent_category_code, 'page': page,'error': ex, 'traceback': traceback.format_exc()})
+        error_collection.insert_one({'parent_category_code': parent_category_code,'status':status,'date_time': datetime.now(), 'page': page,'error': ex, 'traceback': traceback.format_exc()})
 
 
 def crawl_sitemap():

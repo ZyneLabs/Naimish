@@ -72,9 +72,10 @@ def crawl_products(maker_id,page):
 
         if cache_data is not None:
             data = cache_data['data']
-
+            status  = 200
         else:
             res = send_req_syphoon(PROXY_VENDOR,'get',main_url+f'&page={page}')
+            status = res.status_code
             res.raise_for_status()
             data = res.text
             save_cache_for(maker_id,page,data)
@@ -95,6 +96,8 @@ def crawl_products(maker_id,page):
             {
                 'url': main_url,
                 'page': page,
+                'status': status,
+                'date_time': datetime.now(),
                 'error': str(ex),
                 'traceback': traceback.format_exc(),
             }
