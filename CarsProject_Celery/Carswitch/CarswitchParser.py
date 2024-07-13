@@ -78,7 +78,7 @@ def carswitch_parser(url):
             html = cached_data['data']
             req_status = 200
         else:
-            req = send_req_syphoon(1, 'GET', url)
+            req = send_req_syphoon(PROXY_VENDOR, 'GET', url)
             req_status = req.status_code
             req.raise_for_status()
             cache_collection.insert_one(
@@ -153,7 +153,7 @@ def carswitch_parser(url):
 
 @celery_app.task(queue='carswitch')
 def start_scraper():
-    for url in product_collection.find({'scraped':0}):
+    for url in product_collection.find({'scraped':0}).limit(10):
         print(url['url'])
         carswitch_parser.delay(url['url'])
         

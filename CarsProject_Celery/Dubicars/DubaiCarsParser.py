@@ -85,7 +85,7 @@ def dubaicars_parser(url):
 
 @celery_app.task(queue = 'dubicars')
 def start_scraper():
-    for url in product_collection.find({'scraped':0}).limit(150):
+    for url in product_collection.find({'scraped':0}).limit(10):
         print(url['url'])
         dubaicars_parser.delay(url['url'])
   

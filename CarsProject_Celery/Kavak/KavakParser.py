@@ -87,7 +87,7 @@ def kavak_parser(url):
 
 @celery_app.task(queue = 'kavak')
 def start_scraper():
-    for url in product_collection.find({'scraped':0}):
+    for url in product_collection.find({'scraped':0}).limit(10):
         print(url['url'])
         kavak_parser.delay(url['url'])
         

@@ -39,7 +39,7 @@ def automalluae_parser(url):
             html = cached_data['data']
             req_status = 200
         else:
-            req = send_req_syphoon(0, 'GET', url)
+            req = send_req_syphoon(PROXY_VENDOR, 'GET', url)
             req_status = req.status_code
             req.raise_for_status()
             cache_collection.insert_one(

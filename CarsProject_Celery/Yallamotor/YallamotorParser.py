@@ -87,7 +87,7 @@ def yallamotor_parser(url):
 
 @celery_app.task(queue = 'yallamotor')
 def start_scraper():
-    for url in product_collection.find({'scraped':0}).limit(150):
+    for url in product_collection.find({'scraped':0}).limit(10):
         print(url['url'])
         yallamotor_parser.delay(url['url'])
         
