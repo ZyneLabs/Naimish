@@ -10,6 +10,8 @@ import json
 import traceback
 import re
 from datetime import datetime
+from rq import Queue
+from redis import Redis
 
 load_dotenv()
 

@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-listen = ['default','Automalluae']
+listen = ['default','Automalluae','Cars24','Carswitch','Dubicars','Kavak','Yallamotor']
 redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
 
 conn = Redis.from_url(redis_url)
