@@ -1,10 +1,10 @@
 from common.utils import *
 
 redis_conn = Redis()
-queue = Queue('Dubicars',connection=redis_conn)
+queue = Queue('Dubaicars',connection=redis_conn)
 
 
-db = client['dubicars']
+db = client['dubaicars']
 product_collection = db['urls']
 cache_collection = db['cache']
 error_collection = db['error']

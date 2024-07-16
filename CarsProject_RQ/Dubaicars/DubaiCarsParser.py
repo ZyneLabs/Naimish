@@ -1,7 +1,7 @@
 from common.utils import *
 
 
-db = client['dubicars']
+db = client['dubaicars']
 product_collection = db['urls']
 cache_collection = db['cache']
 error_collection = db['error']
