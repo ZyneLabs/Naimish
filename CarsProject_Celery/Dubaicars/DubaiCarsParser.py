@@ -3,7 +3,7 @@ from celery_worker import celery_app
 
 
 
-db = client['dubicars']
+db = client['dubaicars']
 product_collection = db['urls']
 cache_collection = db['cache']
 error_collection = db['error']
@@ -25,7 +25,7 @@ def get_description(soup):
     description = ' | '.join(description)
     return description
 
-@celery_app.task(queue = 'dubicars')
+@celery_app.task(queue = 'dubaicars')
 def dubaicars_parser(url):
     try:
         cached_data = cache_collection.find_one({'url': url})
@@ -83,7 +83,7 @@ def dubaicars_parser(url):
     except Exception as e:
         error_collection.insert_one({'url':url, 'status':req_status,'date_time': datetime.now(), 'error':str(e), 'traceback':traceback.format_exc()})
 
-@celery_app.task(queue = 'dubicars')
+@celery_app.task(queue = 'dubaicars')
 def start_scraper():
     for url in product_collection.find({'scraped':0}).limit(10):
         print(url['url'])

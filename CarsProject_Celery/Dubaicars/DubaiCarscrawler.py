@@ -1,7 +1,7 @@
 from common import *
 from celery_worker import celery_app
 
-db = client['dubicars']
+db = client['dubaicars']
 product_collection = db['urls']
 cache_collection = db['cache']
 error_collection = db['error']
@@ -24,7 +24,7 @@ def save_cache_for(maker_id,data, page=1):
             }
         )
 
-@celery_app.task(queue = 'dubicars')
+@celery_app.task(queue = 'dubaicars')
 def crawl_makers():
     res = send_req_syphoon(PROXY_VENDOR,'get','https://www.dubicars.com/')
     main_soup = BeautifulSoup(res.content, 'html.parser')
@@ -34,7 +34,7 @@ def crawl_makers():
         check_makers_fesibility.delay(i.get("data-value"))
 
         
-@celery_app.task(queue = 'dubicars')
+@celery_app.task(queue = 'dubaicars')
 def check_makers_fesibility(maker_id):
 
     req = send_req_syphoon(PROXY_VENDOR,'get',f'https://www.dubicars.com/search-count?c=new-and-used&ma={maker_id}&mo=0&b=&set=&eo=export-only&stsd=&cr=USD&cy=&co=&s=&gi=&f=&g=&l=&st=')
@@ -64,7 +64,7 @@ def check_makers_fesibility(maker_id):
                 if len(product_urls) != 0:
                     product_collection.insert_many(product_urls)
 
-@celery_app.task(queue = 'dubicars')
+@celery_app.task(queue = 'dubaicars')
 def crawl_products(maker_id,page):
     try:
         main_url= f'https://www.dubicars.com/search?c=new-and-used&ma={maker_id}&mo=0&b=&set=&eo=export-only&stsd=&cr=USD&cy=&co=&s=&gi=&f=&g=&l=&st='

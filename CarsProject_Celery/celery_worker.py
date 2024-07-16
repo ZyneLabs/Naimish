@@ -4,7 +4,7 @@ tasks = [
     'Automalluae.AutomalluaeCrawler', 'Automalluae.AutomalluaeParser_v2',
     'Cars24.Cars24Crawler', 'Cars24.Cars24Parser',
     'Carswitch.CarswitchCrawler', 'Carswitch.CarswitchParser',
-    'Dubicars.DubaiCarscrawler', 'Dubicars.DubaiCarsParser',
+    'Dubaicars.DubaiCarscrawler', 'Dubaicars.DubaiCarsParser',
     'Kavak.KavakCrawler', 'Kavak.KavakParser',
     'Yallamotor.YallamotorCrawler', 'Yallamotor.YallamotorParser',
 ]
@@ -30,11 +30,11 @@ celery_app.conf.update(
         'Carswitch.CarswitchParser.start_scraper': {'queue': 'carswitch'},
         'Carswitch.CarswitchParser.carswitch_parser': {'queue': 'carswitch'},
         
-        'Dubicars.DubaiCarscrawler.crawl_makers': {'queue': 'dubicars'},
-        'Dubicars.DubaiCarscrawler.check_makers_fesibility': {'queue': 'dubicars'},
-        'Dubicars.DubaiCarscrawler.crawl_products': {'queue': 'dubicars'},
-        'Dubicars.DubaiCarsParser.start_scraper': {'queue': 'dubicars'},
-        'Dubicars.DubaiCarsParser.dubaicars_parser': {'queue': 'dubicars'},
+        'Dubaicars.DubaiCarscrawler.crawl_makers': {'queue': 'dubaicars'},
+        'Dubaicars.DubaiCarscrawler.check_makers_fesibility': {'queue': 'dubaicars'},
+        'Dubaicars.DubaiCarscrawler.crawl_products': {'queue': 'dubaicars'},
+        'Dubaicars.DubaiCarsParser.start_scraper': {'queue': 'dubaicars'},
+        'Dubaicars.DubaiCarsParser.dubaicars_parser': {'queue': 'dubaicars'},
         
         'Kavak.KavakCrawler.crawl_main_page': {'queue': 'kavak'},
         'Kavak.KavakCrawler.crawl_urls': {'queue': 'kavak'},

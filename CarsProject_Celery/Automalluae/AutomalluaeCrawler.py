@@ -33,8 +33,6 @@ def check_cache_for(data):
 
 def get_authorization():
     req = send_req_syphoon(PROXY_VENDOR,'get','https://www.automalluae.com/en/used-cars-shop/',payload={'keep_headers':True})
-    print(req)
-    print(req.text)
     try:
         return req.headers['set-cookie'].split('AUTH_TOKEN=')[1].split(';')[0]
     except:

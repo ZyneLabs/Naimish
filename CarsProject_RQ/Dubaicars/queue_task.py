@@ -4,7 +4,7 @@ from .DubaiCarsParser import  dubaicars_parser,product_collection
 import sys
 
 redis_conn = Redis()
-queue = Queue('Dubicars',connection=redis_conn)
+queue = Queue('Dubaicars',connection=redis_conn)
 
 def main(type):
     if type == 'crawl':

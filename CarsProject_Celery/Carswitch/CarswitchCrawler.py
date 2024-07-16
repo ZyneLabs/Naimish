@@ -45,7 +45,6 @@ def save_urls_from_html(html,page):
 @celery_app.task(queue='carswitch')
 def crawl_category():
     res = send_req_syphoon(PROXY_VENDOR, 'GET', 'https://carswitch.com/uae/used-cars/search')
-    print(res.text)
     soup = BeautifulSoup(res.text, 'html.parser')
    
     total_page = int(soup.select_one('div.page-number_holder a:last-child').text)
