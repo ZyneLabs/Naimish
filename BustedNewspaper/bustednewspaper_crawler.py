@@ -2,12 +2,20 @@ from bustednewspaper_scraper import bustednewspaper_scraper
 from bs4 import BeautifulSoup
 from pymongo import MongoClient
 from datetime import datetime
-from redis import Redis
-from rq import Queue
+# import redis
+import os
+# from rq import Queue
 
-q = Queue(connection=Redis())
+# q = Queue(connection=Redis())
+# redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+# conn = redis.from_url(redis_url)
+# q = Queue(connection=conn)
 
-client = MongoClient("localhost", 27017)
+from multiprocessing import Pool
+
+mongo_url = os.getenv('MONGO_URL', 'mongodb://localhost:27017')
+
+client = MongoClient(mongo_url)
 db = client["bustednewspaper"]
 urls_collection = db["urls"]
 cache_data = db["cache_data"]
@@ -34,10 +42,12 @@ def crawl_County():
 
     for state in states_data:
         for county in state['county']:
-            q.enqueue(crawl_records,{'url':county['url'],'state':state['state'],'state_url':state['url'],'county':county['name']})
+            # q.enqueue(crawl_records,{'url':county['url'],'state':state['state'],'state_url':state['url'],'county':county['name']})
+            crawl_records({'url':county['url'],'state':state['state'],'state_url':state['url'],'county':county['name']})
 
 
-def crawl_records(url_data,page=1):
+def crawl_records(url_data):
+    page  = url_data.get('page', 1)
     if page == 1:
         url = url_data['url']
     else:
@@ -76,7 +86,10 @@ def crawl_records(url_data,page=1):
         urls_collection.insert_many(
             urls
         )
-    # if page == 1 and soup.select_one('a.page-numbers:nth-last-child(2)') and 'Next' in soup.select_one('a.page-numbers:last-child span').text:
-    #     total_pages = int(soup.select_one('a.page-numbers:nth-last-child(2)').text.replace(',',''))
-    #     for i in range(2,total_pages+1):
-    #         q.enqueue(crawl_records,{'url':url,'state':url_data['state']},i)
+
+    if page == 1 and soup.select_one('a.page-numbers:nth-last-child(2)') and 'Next' in soup.select_one('a.page-numbers:last-child span').text:
+        total_pages = int(soup.select_one('a.page-numbers:nth-last-child(2)').text.replace(',',''))
+        # for i in range(2,total_pages+1):
+        #     q.enqueue(crawl_records,url_data,i)
+        with Pool(10) as p:
+            p.map(crawl_records,[url_data|{'page':i} for i in range(2,total_pages+1)])
