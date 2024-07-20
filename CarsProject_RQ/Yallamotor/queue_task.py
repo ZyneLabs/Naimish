@@ -5,7 +5,6 @@ from .YallamotorCrawler import crawl_from_brands
 from .YallamotorParser import yallamotor_parser,product_collection
 import sys
 
-redis_conn = Redis()
 queue = Queue('Yallamotor',connection=redis_conn)
 
 def main(type):
