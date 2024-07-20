@@ -1,12 +1,13 @@
 from rq import Worker, Queue, Connection
 from redis import Redis
 import os
-from dotenv import load_dotenv
+import subprocess
 
-load_dotenv()
+redis_url = os.getenv('REDIS_URI')
+
+subprocess.Popen(['rq-dashboard', '--redis-url',redis_url])
 
 listen = ['default','Automalluae','Cars24','Carswitch','Dubaicars','Kavak','Yallamotor']
-redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
 
 conn = Redis.from_url(redis_url)
 

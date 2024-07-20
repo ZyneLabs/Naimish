@@ -1,6 +1,5 @@
 from bs4 import BeautifulSoup
 import requests
-import os 
 from pymongo.mongo_client import MongoClient
 from urllib.parse import urlencode
 from typing import Union as union
@@ -11,13 +10,17 @@ import traceback
 import re
 from datetime import datetime
 from rq import Queue
-from redis import Redis
+from redis import Redis 
 
-load_dotenv()
+
+# load_dotenv()
 
 # API_KEYS= os.getenv("API_KEYS").split(",")
 MONGO_URI = getenv('MONGODB_URI')
 PROXY_VENDOR = getenv('PROXY_VENDOR')
+redis_url = getenv('REDIS_URI')
+
+redis_conn = Redis.from_url(redis_url)
 
 client = MongoClient(MONGO_URI)
 

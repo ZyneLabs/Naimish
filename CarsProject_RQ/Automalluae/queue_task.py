@@ -3,7 +3,6 @@ from .AutomalluaeCrawler import crawl_urls
 from .AutomalluaeParser_v2 import automalluae_parser,product_collection
 import sys
 
-redis_conn = Redis()
 queue = Queue('Automalluae',connection=redis_conn)
 
 def main(type):

@@ -3,7 +3,6 @@ from .Cars24Crawler import crawl_urls
 from .Cars24Parser import cars24_parser,product_collection
 import sys
 
-redis_conn = Redis()
 queue = Queue('Cars24',connection=redis_conn)
 
 def main(type):

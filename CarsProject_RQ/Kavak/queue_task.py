@@ -3,7 +3,6 @@ from .KavakCrawler import crawl_main_page
 from .KavakParser import kavak_parser,product_collection
 import sys
 
-redis_conn = Redis()
 queue = Queue('Kavak',connection=redis_conn)
 
 def main(type):

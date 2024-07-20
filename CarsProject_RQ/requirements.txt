@@ -1,0 +1,8 @@
+redis
+rq
+beautifulsoup4
+requests
+lxml
+pymongo
+rq-dashboard
+python-dotenv

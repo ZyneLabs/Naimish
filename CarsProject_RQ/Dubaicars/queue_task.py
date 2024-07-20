@@ -3,7 +3,6 @@ from .DubaiCarscrawler import crawl_makers
 from .DubaiCarsParser import  dubaicars_parser,product_collection
 import sys
 
-redis_conn = Redis()
 queue = Queue('Dubaicars',connection=redis_conn)
 
 def main(type):

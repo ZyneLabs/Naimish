@@ -1,0 +1,31 @@
+version: 'latest'
+
+services:
+  redis:
+    image: redis:alpine
+    ports:
+      - 6379:6379
+    
+  db:
+    image: mongo:latest
+    ports:
+      - 27017:27017
+    volumes:
+      - mongodb_storage:/data/db
+
+  worker:
+    build: .
+    command: python manage.py worker
+    ports:
+      - 9181:9181
+    depends_on:
+      - redis
+      - db
+    environment:
+      MONGODB_URI: mongodb://db:27017
+      REDIS_URI: redis://redis:6379/0
+      PROXY_VENDOR: YV749KjNlvgdbjsVWkW4
+
+volumes:
+  mongodb_storage:
+    external: true

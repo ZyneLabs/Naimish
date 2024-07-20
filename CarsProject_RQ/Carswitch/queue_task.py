@@ -3,7 +3,6 @@ from .CarswitchCrawler import crawl_category
 from .CarswitchParser import carswitch_parser,product_collection
 import sys
 
-redis_conn = Redis()
 queue = Queue('Carswitch',connection=redis_conn)
 
 def main(type):
