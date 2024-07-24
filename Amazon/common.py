@@ -15,8 +15,9 @@ from rq import Queue, Retry
 from redis import Redis
 
 
-API_KEYS = getenv('API_KEYS').split(',')
+# API_KEYS = getenv('API_KEYS').split(',')
 
+API_KEYS = ['YV749KjNlvgdbjsVWkW3','YV749KjNlvgdbjsVWkW4']
 def send_req_syphoon(
     scraper_class, method, url, params=None, headers=None, payload=None, cookies=None, total_retries=5
 ):
@@ -38,7 +39,7 @@ def send_req_syphoon(
         "key": API_KEYS[scraper_class],
         "url": url,
         "method": method,
-        "country_code": "in",
+        # "country_code": "us",
     }
     
     if cookies is not None:
