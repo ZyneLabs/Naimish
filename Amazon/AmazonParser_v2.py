@@ -136,7 +136,7 @@ def get_also_bought(soup,selector):
                 product['ratings_total'] = item.select_one('span.a-size-small').text.strip()
             products.append(product)
         except:
-            print(traceback.print_exc())
+            ...
 
     return products
 
@@ -216,7 +216,6 @@ def get_price_info(soup):
                 price_info['list_price'] = soup.select_one('div#corePrice_desktop span.aok-offscreen').text.replace('₹','').replace('$','').strip()
 
     except:
-        print(traceback.print_exc())
         ...
 
     return price_info
@@ -715,45 +714,3 @@ def amazon_parser(url,domain,page_html,asin=None):
         details['releted_product'] = releted_product
 
     return details
-
-headers = {
-    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-    'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
-    'cache-control': 'max-age=0',
-    'cookie': 'session-id=146-1927424-0708753; i18n-prefs=USD; ubid-main=133-9102078-3948428; lc-main=en_US; session-id-time=2082787201l; skin=noskin; session-token=7b00p7MafSxA3/CiE5XRybBP4mIsZeNeGoHVMS2Mk6tvg1qWpA4kY6mLfe6qvfVoZByVWkf74kIl9c+kkBl9TuEs9xNivi772dfYf0t8nsC/Zc1lMbhKZWRArWDqOF941gJKZ6bissl5vSRy8+T+CYGaicJZX4ABQeaYFawC96cUv1xNVqXC3GYS12lY3Xl6TUeXy+RUB8fFWSmnqLOIOrlft9ZJSu7FUfjrywqloeTamXPVwWMloXALM5GOERiMsZuslF7kmmMhzAl0ylyitDDjV+M49oIaPm/HtJKmskxWlkosXmBA7cr2l2NH3yN1wfF1QBBrWCK5TnYAmQhjY/cp+Rr1dekA; csm-hit=tb:s-HSQY2A8JXBE48RRSXM3Q|1721897014652&t:1721897017059&adb:adblk_no',
-    'device-memory': '8',
-    'downlink': '10',
-    'dpr': '1',
-    'ect': '4g',
-    'priority': 'u=0, i',
-    'rtt': '100',
-    'sec-ch-device-memory': '8',
-    'sec-ch-dpr': '1',
-    'sec-ch-ua': '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
-    'sec-ch-ua-mobile': '?0',
-    'sec-ch-ua-platform': '"Linux"',
-    'sec-ch-viewport-width': '1850',
-    'sec-fetch-dest': 'document',
-    'sec-fetch-mode': 'navigate',
-    'sec-fetch-site': 'same-origin',
-    'sec-fetch-user': '?1',
-    'upgrade-insecure-requests': '1',
-    'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-    'viewport-width': '1850',
-}
-
-asin = 'B08GHX9G5L'
-try:
-    with open(f'{asin}.html','r',encoding='utf-8') as f:
-        html = f.read()
-except:
-    req = send_req_syphoon(1,'get',f'https://www.amazon.com/dp/{asin}/?th=1&psc=1',headers=headers)
-    print(req.status_code)
-    req.raise_for_status()
-    html = req.text
-    with open(f'{asin}.html','w',encoding='utf-8') as f:
-        f.write(html)
-
-
-
-json.dump(amazon_parser(f'https://www.amazon.com/dp/{asin}/?th=1&psc=1','amazon.com',html,asin),open(f'{asin}.json','w',encoding='utf-8'),indent=4)
