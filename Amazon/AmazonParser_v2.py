@@ -102,7 +102,7 @@ def get_frequently_bought_together(soup):
             product['title'] = item.select('div.a-cardui div.a-section.a-spacing-none a')[1].text
             product['link'] = item.select_one('div.a-cardui div.a-section.a-spacing-none a')['href']
             product['image'] = item.select_one('div.a-cardui div.a-section.a-spacing-none a img')['src']
-            product['price'] = item.select_one('span.a-price span.a-offscreen').text.replace('$','')
+            product['price'] = item.select_one('span.a-price span.a-offscreen').text.strip()
             products.append(product)
         except:
             ...
@@ -127,17 +127,42 @@ def get_also_bought(soup,selector):
             product = {}
             product['asin'] = unquote(item.select_one('a.a-link-normal')['href']).split('/dp/')[1].split('/')[0]
             product['title'] = item.select_one('a.a-link-normal div[aria-hidden="true"]').text.strip()
-            product['link'] = item.select_one('a')['href']
+            product['link'] = item.select_one('a.a-link-normal')['href']
             product['image'] = item.select_one('a img')['src']
-            product['price'] = item.select_one('span.a-price span.a-offscreen').text.replace('$','')
+            product['price'] = item.select_one('span.a-price span.a-offscreen').text.strip()
             if item.select_one('span.a-icon-alt'):
                 product['rating']=item.select_one('span.a-icon-alt').text.split()[0]
                 product['ratings_total'] = item.select_one('span.a-size-small').text.strip()
             products.append(product)
         except:
-            ...
+            print(traceback.print_exc())
 
     return products
+
+def get_shop_by_look(soup):
+    products = []
+    for item in soup.select('div.shopbylook-btf-items-section div.shopbylook-btf-item-box'):
+        try:
+            product = {}
+            product['asin'] = unquote(item.select_one('a.sbl-image-link')['href']).split('/dp/')[1].split('/')[0]
+            product['link'] = item.select_one('a.sbl-image-link')['href']
+            product['title'] = item.select_one('a.sbl-image-link img')['alt']
+            product['image'] = item.select_one('a.sbl-image-link img')['data-src']
+            if item.select_one('div.sbl-item-rating span') and item.select_one('div.sbl-item-rating span').text.strip():
+                product['rating'] = item.select_one('div.sbl-item-rating span').text.strip()
+                product['ratings_total'] = item.select_one('div.sbl-item-rating span.sbl-review-count').text.strip()
+            if item.select_one('div.sbl-item-price span[aria-hidden="true"]'):
+                product['price'] = (item.select_one('div.sbl-item-price span[aria-hidden="true"] span.a-price-symbol').text + item.select_one('div.sbl-item-price span[aria-hidden="true"] span.a-price-whole').text +'.'+item.select_one('div.sbl-item-price span[aria-hidden="true"] span.a-price-fraction').text).replace(' ','').strip()
+            products.append(product)
+        except:
+            ...
+
+    if products:
+        return {
+            'products': products,
+            'title': soup.select_one('#sbl-header-title').text.strip()
+        }
+
 
 def get_variations(soup):
     variations_info = {}
@@ -267,6 +292,56 @@ def get_protection_plan(soup):
         cnt+=1
     return plans
 
+def get_bundles(soup):
+    bundles = []
+    for row in soup.select('#bundleV2_feature_div li'):
+        try:
+            bundle = {}
+            bundle['asin'] = unquote(row.select_one('a.a-link-normal')['href']).split('/dp/')[1].split('/')[0]
+            bundle['title'] = row.select_one('span.pba-lob-bundle-title span.a-truncate-full').text.strip()
+            bundle['link'] = row.select_one('a.a-link-normal')['href']
+            bundle['image'] = row.select_one('img.pba-lob-bundle-image')['src']
+
+            if row.select('.pba-lob-review-stars'):
+                bundle['rating'] = [rating for rating in row.select_one('.pba-lob-review-stars')['class'] if 'a-star-' in rating][0].replace('a-star-','').replace('-','.')
+
+            if row.select('.pba-lob-review-count'):
+                bundle['ratings_total'] = row.select_one('.pba-lob-review-count').text.strip()
+            if row.select('span.pba-lob-bundle-stp-price span.a-offscreen'):
+                bundle['list_price'] = row.select_one('span.pba-lob-bundle-stp-price span.a-offscreen').text.strip()
+
+            if row.select('span.pba-lob-bundle-buy-price span.a-offscreen'):
+                if bundle['list_price'] == '':
+                    bundle['list_price'] = row.select_one('span.pba-lob-bundle-buy-price span.a-offscreen').text.strip()
+                else:
+                    bundle['promo_price'] = row.select_one('span.pba-lob-bundle-buy-price span.a-offscreen').text.strip()
+            bundles.append(bundle)
+        except:
+           ...
+    return bundles
+
+
+def  get_bundle_contents(soup):
+    bundle_contents = []
+    for row in soup.select('div.bundle-components div.a-row'):
+        try:
+            bundle = {}
+            bundle['asin'] =unquote(row.select_one('div.bundle-comp-title a')['href']).split('/dp/')[1].split('/')[0]
+            bundle['title'] = row.select_one('div.bundle-comp-title a').text.strip()
+            bundle['link'] = row.select_one('div.bundle-comp-title a')['href']
+            bundle['image'] = row.select_one('img.a-thumbnail-right')['src']
+            if row.select('.bundle-comp-bullets li'):
+                bundle['feature_bullets'] = clean_str(' | '.join([i.text.strip() for i in row.select('.bundle-comp-bullets li')]))
+            if row.select('.bundle-comp-reviews'):
+                bundle['rating'] = [rating for rating in row.select_one('.bundle-comp-reviews .a-icon-star')['class'] if 'a-star-' in rating][0].replace('a-star-','').replace('-','.')
+                bundle['ratings_total'] = row.select_one('.bundle-comp-reviews .bundle-comp-reviews-count').text.replace('(','').replace(')','').strip()
+            bundle['price'] = row.select_one('.bundle-comp-price').text.strip()
+            bundle_contents.append(bundle)
+        except:
+           ...
+    return bundle_contents
+
+
 def amazon_parser(url,domain,page_html,asin=None):
 
     details = {}
@@ -355,8 +430,9 @@ def amazon_parser(url,domain,page_html,asin=None):
     except Exception as e:
         ...
 
-    
-    details['addition_videos'] = get_additional_videos(soup)
+    additional_videos = get_additional_videos(soup)
+    if additional_videos:
+        details['addition_videos'] =additional_videos
     
     # coupon
     try:
@@ -366,27 +442,32 @@ def amazon_parser(url,domain,page_html,asin=None):
     except:
         details['has_coupon'] = False
 
+    # Rating
+    if soup.find('span',attrs={"data-hook":"rating-out-of-text"}):
+        details['rating'] = soup.find('span',attrs={"data-hook":"rating-out-of-text"}).text.split('out')[0].strip()
+        
     # total ratings
     try:
-        details['total_ratings'] = int(soup.find('span',id="acrCustomerReviewText").text.split('ratings')[0].strip().replace(',',''))
+        details['total_ratings'] = int(soup.find('span',id="acrCustomerReviewText").text.split('rating')[0].strip().replace(',',''))
     except:
         ...
     
     # rating_breakdown
-    try:
+    
+    if soup.select('table#histogramTable tr'):
         rating_breakdown = []
         for row in soup.select('table#histogramTable tr'):
             tds = row.find_all('td')
-            if tds:
-                rating_breakdown.append({tds[0].a.text.strip() :{
-                    'percentage' : tds[2].text.strip().replace('%',''),
-                    'count' :round(details['total_ratings'] * (int(tds[2].text.strip().replace('%','')) / 100))
-                }})
-
+            try:
+                if tds:
+                    rating_breakdown.append({tds[0].a.text.strip() :{
+                        'percentage' : tds[2].text.strip().replace('%',''),
+                        'count' :round(details['total_ratings'] * (int(tds[2].text.strip().replace('%','')) / 100))
+                    }})
+            except:
+                ...
         details['rating_breakdown'] = rating_breakdown
-    except Exception as ex:
-        ...
-
+    
     # MarketPlace ID
     try:
         details['marketplace_id'] = soup.find(attrs={"data-asin": asin, "data-marketplace": True})['data-marketplace']
@@ -415,10 +496,6 @@ def amazon_parser(url,domain,page_html,asin=None):
         details['current_selection'] = variation_info['current_selection']
         details['variant_asins'] =','.join([asin for asin in variation_info['asins']])
 
-    # Rating
-    if soup.find('span',attrs={"data-hook":"rating-out-of-text"}):
-        details['rating'] = soup.find('span',attrs={"data-hook":"rating-out-of-text"}).text.split('out')[0].strip()
-        
     # Color of Variant
     if soup.find(id="variation_color_name"):
         details['color_variant']  = soup.find(id="variation_color_name").find('span',class_='selection').text.strip()
@@ -438,11 +515,16 @@ def amazon_parser(url,domain,page_html,asin=None):
     if product_details:
         details['product_details'] = product_details
 
+    # is_bundle
+    details['is_bundle'] = True if soup.find(id="bundle-v2-btf-contains-label") else False
+    if details['is_bundle']:
+        details['bundle_contents'] = get_bundle_contents(soup)
+
     # about this item
     if soup.find(id="productFactsDesktopExpander"):
-        details['about_this_item'] = clean_str(' | '.join([i.text.strip() for i in soup.find('h3',string=re.compile('About this item')).find_next_siblings('ul',class_="a-unordered-list a-vertical a-spacing-small")]))
+        details['feature_bullets'] = clean_str(' | '.join([i.text.strip() for i in soup.find('h3',string=re.compile('About this item')).find_next_siblings('ul',class_="a-unordered-list a-vertical a-spacing-small")]))
     elif soup.find(id="featurebullets_feature_div"):
-        details['about_this_item'] =clean_str(' | '.join([i.text.strip() for i in soup.select('div#featurebullets_feature_div ul li')]))
+        details['feature_bullets'] =clean_str(' | '.join([i.text.strip() for i in soup.select('div#featurebullets_feature_div ul li')]))
 
     # additional info
     try:
@@ -477,6 +559,9 @@ def amazon_parser(url,domain,page_html,asin=None):
     else:
         in_stock = 'No'
     details['in_stock'] = in_stock
+
+    if soup.select('#dealBadgeSupportingText'):
+        details['deal_badge'] = soup.select('#dealBadgeSupportingText')[0].text.strip()
 
     if soup.find(id="mir-layout-DELIVERY_BLOCK-slot-PRIMARY_DELIVERY_MESSAGE_LARGE"):
         delivery_soup =soup.find(id="mir-layout-DELIVERY_BLOCK-slot-PRIMARY_DELIVERY_MESSAGE_LARGE").find('span')
@@ -528,20 +613,30 @@ def amazon_parser(url,domain,page_html,asin=None):
     if top_reviews:
         details['top_reviews'] = top_reviews
 
+    # bundles
+    bundles = get_bundles(soup)
+    if bundles:
+        details['bundles'] = bundles
+
     # Frequently bought together
     frequently_bought_together = get_frequently_bought_together(soup)
 
     if frequently_bought_together:
         details['frequently_bought_together'] = frequently_bought_together
     
+    # shop_by_look
+    shop_by_look = get_shop_by_look(soup)
+    if shop_by_look:
+        details['shop_by_look'] = shop_by_look
+
     # Also bought
-    also_bought = get_also_bought(soup,'div#sims-consolidated-2_feature_div li')
+    also_bought = get_also_bought(soup,'div#sims-consolidated-2_feature_div li') or get_also_bought(soup,'div#sp_detail_thematic-highly_rated li') or get_also_bought(soup,'div#similarities_feature_div li')
 
     if also_bought:
         details['also_bought'] = also_bought
 
     # related to this item
-    releted_product = get_also_bought(soup,'div#anonCarousel2 li')
+    releted_product = get_also_bought(soup,'div#anonCarousel2 li') or get_also_bought(soup,'div#sp_detail2 li')
     if releted_product:
         details['releted_product'] = releted_product
 
