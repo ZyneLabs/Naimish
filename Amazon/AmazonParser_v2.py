@@ -129,7 +129,8 @@ def get_also_bought(soup,selector):
             product['title'] = item.select_one('a.a-link-normal div[aria-hidden="true"]').text.strip()
             product['link'] = item.select_one('a.a-link-normal')['href']
             product['image'] = item.select_one('a img')['src']
-            product['price'] = item.select_one('span.a-price span.a-offscreen').text.strip()
+            if item.select_one('span.a-price span.a-offscreen'):
+                product['price'] = item.select_one('span.a-price span.a-offscreen').text.strip()
             if item.select_one('span.a-icon-alt'):
                 product['rating']=item.select_one('span.a-icon-alt').text.split()[0]
                 product['ratings_total'] = item.select_one('span.a-size-small').text.strip()
@@ -198,8 +199,10 @@ def get_price_info(soup):
                 price_info['promo_price']  = soup.find(class_="a-section a-spacing-none aok-align-center aok-relative").find('span',class_='priceToPay').text.replace('₹','').replace('$','').strip()
                 price_info['list_price'] = soup.find(class_="basisPrice").find(class_='a-price a-text-price').find(class_='a-offscreen').text.replace('₹','').replace('$','').strip()
             
-            elif soup.select_one('span.a-price.reinventPricePriceToPayMargin.priceToPay'):
-                price_info['list_price'] = soup.select_one('span.a-price.reinventPricePriceToPayMargin.priceToPay').text.replace('₹','').replace('$','').strip()
+            elif soup.select_one('span.a-price.reinventPricePriceToPayMargin.priceToPay') and soup.select_one('span.a-price.reinventPricePriceToPayMargin.priceToPay span.a-offscreen').text.strip():
+                price_info['list_price'] = soup.select_one('span.a-price.reinventPricePriceToPayMargin.priceToPay span.a-offscreen').text.replace('₹','').replace('$','').strip()
+            elif soup.select_one('div#corePriceDisplay_desktop_feature_div span.aok-offscreen'):
+                price_info['list_price'] = soup.select_one('div#corePriceDisplay_desktop_feature_div span.aok-offscreen').text.replace('₹','').replace('$','').strip()
 
         elif soup.find(id="corePrice_desktop"):
             if soup.select('span.a-price.a-text-price.a-size-base[data-a-strike="true"] span.a-offscreen'):
@@ -207,9 +210,13 @@ def get_price_info(soup):
                 price_info['promo_price']  = soup.select_one('span.a-price.a-text-price.a-size-medium.apexPriceToPay span.a-offscreen').text.replace('₹','').replace('$','').strip()
                 price_info['discount_percentage']  = soup.select_one('td.a-span12.a-color-price.a-size-base span.a-color-price').text.split('(')[1].split(')')[0].strip()
             
-            else:
+            elif soup.select_one('span.a-price.a-text-price.a-size-medium.apexPriceToPay span.a-offscreen') and soup.select_one('span.a-price.a-text-price.a-size-medium.apexPriceToPay span.a-offscreen').text.strip():
                 price_info['list_price'] = soup.select_one('span.a-price.a-text-price.a-size-medium.apexPriceToPay span.a-offscreen').text.replace('₹','').replace('$','').strip()
+            elif soup.select_one('div#corePrice_desktop span.aok-offscreen'):
+                price_info['list_price'] = soup.select_one('div#corePrice_desktop span.aok-offscreen').text.replace('₹','').replace('$','').strip()
+
     except:
+        print(traceback.print_exc())
         ...
 
     return price_info
@@ -220,10 +227,12 @@ def get_specifications(soup):
         sepecification = {}
        
         for spec in soup.select('div#productDetails_feature_div div.a-column.a-span6'):
-            if not spec.select('table') or spec.select('table#productDetails_feedback_sections'):continue
-            if spec.find('h1') and 'Feedback' not in spec.find('h1').text and 'Warranty' not in spec.find('h1').text:
+            if not spec.select('table tr'):continue
+            if spec.select('table#productDetails_feedback_sections'):
+                spec.select_one('table#productDetails_feedback_sections').extract()
+
+            if spec.find('h1') and 'feedback' not in spec.find('h1').text.lower() and 'warranty' not in spec.find('h1').text.lower():
                 header = spec.find('h1').text
-                print(header)
                 val = []
                 for item in spec.find_all('tr'):
                     val.append(f"{item.find('th').text.strip()} : {item.find('td').text.strip()}")
@@ -234,11 +243,8 @@ def get_specifications(soup):
                 for item in spec.find_all('tr'):
                     val.append(f"{item.find('th').text.strip()} : {item.find('td').text.strip()}")
 
-                sepecification = clean_str(' | '.join(val).strip())
-        
-       
-
-
+                sepecification =clean_str(' | '.join(val).strip())
+              
     elif soup.find('table',id='productDetails_techSpec_section_1'):
         val = []
         for item in soup.find('table',id='productDetails_techSpec_section_1').find_all('tr'):
@@ -250,7 +256,7 @@ def get_specifications(soup):
         for item in soup.select('div.a-column.a-span6.block-content.block-type-table tr'):
             val.append(f"{item.find('td').text.strip()} : {item.find_all('td')[1].text.strip()}")
         sepecification = clean_str(' | '.join(val).strip())
-    
+   
     return sepecification
 
 
@@ -525,6 +531,33 @@ def amazon_parser(url,domain,page_html,asin=None):
         details['feature_bullets'] = clean_str(' | '.join([i.text.strip() for i in soup.find('h3',string=re.compile('About this item')).find_next_siblings('ul',class_="a-unordered-list a-vertical a-spacing-small")]))
     elif soup.find(id="featurebullets_feature_div"):
         details['feature_bullets'] =clean_str(' | '.join([i.text.strip() for i in soup.select('div#featurebullets_feature_div ul li')]))
+    
+    if soup.find(id="variation_size_name"):
+        details['size_variant'] = soup.find(id="variation_size_name").find('span',class_='selection').text.strip()
+
+    # ingredients
+    if soup.find(id="nic-ingredients-content"):
+        details['ingredients'] = clean_str(' | '.join([i.text.strip() for i in soup.find(id='nic-ingredients-content').children]))
+
+
+    #important_information
+    if soup.find(id="important-information"):
+        if soup.select("div#important-information div.a-section.content span.a-text-bold"):
+            imp_info = []
+            for li in soup.select("div#important-information div.a-section.content"):
+                header = li.select_one("span.a-text-bold").text.strip()
+                vals = ','.join([item.text.strip() for item in li.select_one("span.a-text-bold").next_siblings if item.text.strip()])
+                imp_info.append(f"{header} : {vals}")
+            details['important_information'] = clean_str(' | '.join(imp_info))
+        else:
+            details['important_information'] = clean_str(soup.find(id="important-information").text.strip())
+    
+    #nutrition_summary
+    if soup.find(id="nic-nutrition-summary-nutrient-content"):
+        nutrition = []
+        for tr in soup.select('table#nic-nutrition-summary-nutrient-content tr'):
+            nutrition.append([val.text.strip() for val in tr.find_all('td')])
+        details['nutrients'] = dict(zip(nutrition[1],nutrition[0]))
 
     # additional info
     try:
@@ -556,6 +589,8 @@ def amazon_parser(url,domain,page_html,asin=None):
             in_stock = get_digit_groups(in_stock_text)[0]
         else:
             in_stock = 'Yes'
+    elif soup.find(id="availability-string"):
+        in_stock = 'Yes' if 'In Stock' in soup.find(id="availability-string").text.strip() else 'No'
     else:
         in_stock = 'No'
     details['in_stock'] = in_stock
@@ -613,10 +648,33 @@ def amazon_parser(url,domain,page_html,asin=None):
     if top_reviews:
         details['top_reviews'] = top_reviews
 
+    # Product guides and documents
+    if soup.find(id="productDocuments_feature_div"):
+        details['product_guides_and_documents'] = [
+            {
+                'title' : doc.text.strip(),
+                'link' : doc['href']
+            }
+            for doc in soup.select('#productDocuments_feature_div a')
+        ]
     # bundles
     bundles = get_bundles(soup)
     if bundles:
         details['bundles'] = bundles
+
+    # newer model
+    maybe_new_model_soup = soup.find(id="newer-version")
+    if maybe_new_model_soup:
+        details['newer_model'] = {}
+        details['newer_model']['asin'] = unquote(maybe_new_model_soup.select_one('a.a-link-normal')['href']).split('/dp/')[-1].split('/')[0]
+        details['newer_model']['title'] = maybe_new_model_soup.select_one('a.a-link-normal.a-size-base').text.strip()
+        details['newer_model']['link'] = maybe_new_model_soup.select_one('a.a-link-normal.a-size-base')['href']
+        details['newer_model']['image'] = maybe_new_model_soup.select_one('a img')['src']
+        if maybe_new_model_soup.select_one('span.a-color-price'):
+            details['newer_model']['price'] = maybe_new_model_soup.select_one('span.a-color-price').text.strip()
+        if maybe_new_model_soup.select_one('a.reviewsLink i'):
+            details['newer_model']['rating'] = [rating for rating in maybe_new_model_soup.select_one('a.reviewsLink i')['class'] if 'a-star-' in rating][0].replace('a-star-','').replace('-','.')
+            details['newer_model']['ratings_total'] = maybe_new_model_soup.select_one('div#newer-version a.reviewsLink ~ a').text.replace('(','').replace(')','').strip()
 
     # Frequently bought together
     frequently_bought_together = get_frequently_bought_together(soup)
@@ -624,11 +682,27 @@ def amazon_parser(url,domain,page_html,asin=None):
     if frequently_bought_together:
         details['frequently_bought_together'] = frequently_bought_together
     
+    # similar_to_consider
+
+    maybe_similar_to_consider_soup = soup.find(id="value-pick-ac")
+    if maybe_similar_to_consider_soup:
+        details['similar_to_consider'] = {}
+        details['similar_to_consider'] = {}
+        details['similar_to_consider']['asin'] = unquote(maybe_similar_to_consider_soup.select_one('a.a-link-normal')['href']).split('/dp/')[-1].split('/')[0]
+        details['similar_to_consider']['title'] = maybe_similar_to_consider_soup.select_one('a.a-link-normal.a-size-base').text.strip()
+        details['similar_to_consider']['link'] = maybe_similar_to_consider_soup.select_one('a.a-link-normal.a-size-base')['href']
+        details['similar_to_consider']['image'] = maybe_similar_to_consider_soup.select_one('a img')['src']
+        if maybe_similar_to_consider_soup.select_one('span.a-color-price'):
+            details['similar_to_consider']['price'] = maybe_similar_to_consider_soup.select_one('span.a-color-price').text.strip()
+        if maybe_similar_to_consider_soup.select_one('i.a-icon-star.a-icon'):
+            details['similar_to_consider']['rating'] = [rating for rating in maybe_similar_to_consider_soup.select_one('i.a-icon-star.a-icon')['class'] if 'a-star-' in rating][0].replace('a-star-','').replace('-','.')
+            details['similar_to_consider']['ratings_total'] = maybe_similar_to_consider_soup.select_one('i.a-icon-star.a-icon ~ a').text.replace('(','').replace(')','').strip()
+
     # shop_by_look
     shop_by_look = get_shop_by_look(soup)
     if shop_by_look:
         details['shop_by_look'] = shop_by_look
-
+        
     # Also bought
     also_bought = get_also_bought(soup,'div#sims-consolidated-2_feature_div li') or get_also_bought(soup,'div#sp_detail_thematic-highly_rated li') or get_also_bought(soup,'div#similarities_feature_div li')
 
@@ -641,3 +715,45 @@ def amazon_parser(url,domain,page_html,asin=None):
         details['releted_product'] = releted_product
 
     return details
+
+headers = {
+    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
+    'cache-control': 'max-age=0',
+    'cookie': 'session-id=146-1927424-0708753; i18n-prefs=USD; ubid-main=133-9102078-3948428; lc-main=en_US; session-id-time=2082787201l; skin=noskin; session-token=7b00p7MafSxA3/CiE5XRybBP4mIsZeNeGoHVMS2Mk6tvg1qWpA4kY6mLfe6qvfVoZByVWkf74kIl9c+kkBl9TuEs9xNivi772dfYf0t8nsC/Zc1lMbhKZWRArWDqOF941gJKZ6bissl5vSRy8+T+CYGaicJZX4ABQeaYFawC96cUv1xNVqXC3GYS12lY3Xl6TUeXy+RUB8fFWSmnqLOIOrlft9ZJSu7FUfjrywqloeTamXPVwWMloXALM5GOERiMsZuslF7kmmMhzAl0ylyitDDjV+M49oIaPm/HtJKmskxWlkosXmBA7cr2l2NH3yN1wfF1QBBrWCK5TnYAmQhjY/cp+Rr1dekA; csm-hit=tb:s-HSQY2A8JXBE48RRSXM3Q|1721897014652&t:1721897017059&adb:adblk_no',
+    'device-memory': '8',
+    'downlink': '10',
+    'dpr': '1',
+    'ect': '4g',
+    'priority': 'u=0, i',
+    'rtt': '100',
+    'sec-ch-device-memory': '8',
+    'sec-ch-dpr': '1',
+    'sec-ch-ua': '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': '"Linux"',
+    'sec-ch-viewport-width': '1850',
+    'sec-fetch-dest': 'document',
+    'sec-fetch-mode': 'navigate',
+    'sec-fetch-site': 'same-origin',
+    'sec-fetch-user': '?1',
+    'upgrade-insecure-requests': '1',
+    'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+    'viewport-width': '1850',
+}
+
+asin = 'B08GHX9G5L'
+try:
+    with open(f'{asin}.html','r',encoding='utf-8') as f:
+        html = f.read()
+except:
+    req = send_req_syphoon(1,'get',f'https://www.amazon.com/dp/{asin}/?th=1&psc=1',headers=headers)
+    print(req.status_code)
+    req.raise_for_status()
+    html = req.text
+    with open(f'{asin}.html','w',encoding='utf-8') as f:
+        f.write(html)
+
+
+
+json.dump(amazon_parser(f'https://www.amazon.com/dp/{asin}/?th=1&psc=1','amazon.com',html,asin),open(f'{asin}.json','w',encoding='utf-8'),indent=4)
