@@ -106,6 +106,17 @@ def get_frequently_bought_together(soup):
             products.append(product)
         except:
             ...
+    if products:
+        try:
+            maybe_price_bucket = soup.select_one('div#similarities_feature_div div.cardRoot.bucket')
+            if maybe_price_bucket:
+                total_products = ''.join([str(c) for c in range(1,int(maybe_price_bucket['data-count'].replace(',',''))+1)])
+                return {
+                    'total_price': json.loads(soup.select_one('div#similarities_feature_div div.cardRoot.bucket')['data-price-totals'])[total_products],
+                    'products': products
+                }
+        except:
+            ...
 
     return products
 
@@ -163,7 +174,8 @@ def get_price_info(soup):
                 price_info['list_price'] = soup.find(class_="basisPrice").find(class_='a-price a-text-price').find(class_='a-offscreen').text.replace('₹','').replace('$','').strip()
             
             elif soup.select_one('span.a-price.reinventPricePriceToPayMargin.priceToPay'):
-                list_price = soup.select_one('span.a-price.reinventPricePriceToPayMargin.priceToPay').text.replace('₹','').replace('$','').strip()
+                price_info['list_price'] = soup.select_one('span.a-price.reinventPricePriceToPayMargin.priceToPay').text.replace('₹','').replace('$','').strip()
+
         elif soup.find(id="corePrice_desktop"):
             if soup.select('span.a-price.a-text-price.a-size-base[data-a-strike="true"] span.a-offscreen'):
                 price_info['list_price'] = soup.select('span.a-price.a-text-price.a-size-base[data-a-strike="true"] span.a-offscreen')[0].text.replace('₹','').replace('$','').strip()
@@ -181,13 +193,12 @@ def get_specifications(soup):
     sepecification = ''
     if soup.select('div#productDetails_feature_div div.a-column.a-span6'):
         sepecification = {}
-
+       
         for spec in soup.select('div#productDetails_feature_div div.a-column.a-span6'):
-            
-            if not spec.select('table') or spec.find(id="productDetails_feedback_sections"):continue
-            if spec.find('h1') and spec.find(id='productDetails_detailBullets_sections1'):
-                
+            if not spec.select('table') or spec.select('table#productDetails_feedback_sections'):continue
+            if spec.find('h1') and 'Feedback' not in spec.find('h1').text and 'Warranty' not in spec.find('h1').text:
                 header = spec.find('h1').text
+                print(header)
                 val = []
                 for item in spec.find_all('tr'):
                     val.append(f"{item.find('th').text.strip()} : {item.find('td').text.strip()}")
@@ -240,21 +251,41 @@ def get_product_details(soup):
 
     return clean_str(' | '.join([f"{i} : {product_details[i]}" for i in product_details])).replace(' :  : ',' : ')
 
+def get_protection_plan(soup):
+    plans = []
+    cnt=1
+    for row in soup.select('div#abbWrapper  div.abbListItem'):
+        try:
+            plan = {}
+            plan['asin'] = row.select_one(f'input[name="asin.{cnt}"]')['value']
+            plan['title'] = row.find(id='mbbPopoverLink').text
+            plan['price'] = row.find('span',class_='a-color-price').text
+            plans.append(plan)
+        except:
+           ...
+
+        cnt+=1
+    return plans
+
 def amazon_parser(url,domain,page_html,asin=None):
 
     details = {}
 
-
     details['asin'] = asin 
     details['url'] = url 
 
-    try:
+    parent_asin = search_text_between(page_html,'data-parent-asin="','"')
+    if parent_asin:
+        details['parent_asin'] = parent_asin
 
-        soup = BeautifulSoup(page_html, 'lxml')
-
-    except Exception as ex:
-        return {'message':f'Error in sending request {url}'}
-
+    soup = BeautifulSoup(page_html, 'lxml')
+    
+    maybe_search_alias = soup.select_one('form#nav-search-bar-form option[selected]')
+    if maybe_search_alias:
+        details['search_alias'] = {
+            'text' : maybe_search_alias.text.strip(),
+            'value' : maybe_search_alias['value'].split('=')[1]
+        }
     # Product Name
     if soup.find(id='title'):
         details['product_name'] = soup.find(id='title').get_text().strip()
@@ -274,6 +305,11 @@ def amazon_parser(url,domain,page_html,asin=None):
             'text' : soup.find(id="bylineInfo").text,
             'url' : soup.find(id="bylineInfo")['href']
         }
+
+    # protection_plans 
+    protections = get_protection_plan(soup)
+    if protections:
+        details['protection_plans'] = protections
 
     # main_image
     try:
@@ -458,7 +494,7 @@ def amazon_parser(url,domain,page_html,asin=None):
                 }
             
     # Seller Name
-
+    details['is_sold_by_amazon'] = False
     if soup.find('div',attrs={"tabular-attribute-name":"Sold by"},class_="tabular-buybox-text"):
         details['seller_info'] = {'name' :  soup.find('div',attrs={"tabular-attribute-name":"Sold by"},class_="tabular-buybox-text").text.strip()}
        
@@ -471,6 +507,8 @@ def amazon_parser(url,domain,page_html,asin=None):
         if soup.find(id="sellerProfileTriggerId").get('href',''):
             details['seller_info']['link'] = soup.find(id="sellerProfileTriggerId").get('href')
             details['seller_info']['id'] = soup.find(id="sellerProfileTriggerId").get('href').split('seller=')[-1].split('&')[0]
+    else:
+        details['is_sold_by_amazon'] = True
 
     # Best Sellers Rank
     if soup.find('th',string=re.compile('Best Sellers Rank')):
@@ -503,8 +541,7 @@ def amazon_parser(url,domain,page_html,asin=None):
         details['also_bought'] = also_bought
 
     # related to this item
-
-    releted_product = get_also_bought(soup,'div#sp_detail2 li')
+    releted_product = get_also_bought(soup,'div#anonCarousel2 li')
     if releted_product:
         details['releted_product'] = releted_product
 
