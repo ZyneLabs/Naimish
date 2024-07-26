@@ -451,45 +451,46 @@ def amazon_parser(url,domain,page_html,asin=None):
     # total ratings
     try:
         details['total_ratings'] = int(soup.find('span',id="acrCustomerReviewText").text.split('rating')[0].strip().replace(',',''))
+        if soup.select('table#histogramTable tr'):
+            rating_breakdown = []
+            for row in soup.select('table#histogramTable tr'):
+                tds = row.find_all('td')
+                try:
+                    if tds:
+                        rating_breakdown.append({tds[0].a.text.strip() :{
+                            'percentage' : tds[2].text.strip().replace('%',''),
+                            'count' :round(details['total_ratings'] * (int(tds[2].text.strip().replace('%','')) / 100)) if int(tds[2].text.strip().replace('%','')) else 0
+                        }})
+                except:
+                    print(traceback.print_exc())
+                    ...
+            details['rating_breakdown'] = rating_breakdown
+        elif soup.select('ul#histogramTable'):
+            rating_breakdown = []
+            for row in soup.select('ul#histogramTable li'):
+                try:
+                    start= [element.strip() for element in row.find('div', class_='a-section a-spacing-none a-text-left aok-nowrap').contents if isinstance(element, str) and element.strip()][0]
+                    percentage =  [element.strip() for element in row.find('div', class_='a-section a-spacing-none a-text-right aok-nowrap').contents if isinstance(element, str) and element.strip()][0].replace('%','')
+                    if int(percentage) == 0:
+                        count = 0
+                    else:
+                        count =round(details['total_ratings'] * (int(percentage) / 100))
+                    
+                    rating_breakdown.append({
+                        start:{
+                            'percentage' : percentage,
+                            'count' : count
+                        }
+                    })
+                except:
+                    ...
+            details['rating_breakdown'] = rating_breakdown
+        
     except:
         ...
     
     # rating_breakdown
     
-    if soup.select('table#histogramTable tr'):
-        rating_breakdown = []
-        for row in soup.select('table#histogramTable tr'):
-            tds = row.find_all('td')
-            try:
-                if tds:
-                    rating_breakdown.append({tds[0].a.text.strip() :{
-                        'percentage' : tds[2].text.strip().replace('%',''),
-                        'count' :round(details['total_ratings'] * (int(tds[2].text.strip().replace('%','')) / 100)) if int(tds[2].text.strip().replace('%','')) else 0
-                    }})
-            except:
-                print(traceback.print_exc())
-                ...
-        details['rating_breakdown'] = rating_breakdown
-    elif soup.select('ul#histogramTable'):
-        rating_breakdown = []
-        for row in soup.select('ul#histogramTable li'):
-            try:
-                start= [element.strip() for element in row.find('div', class_='a-section a-spacing-none a-text-left aok-nowrap').contents if isinstance(element, str) and element.strip()][0]
-                percentage =  [element.strip() for element in row.find('div', class_='a-section a-spacing-none a-text-right aok-nowrap').contents if isinstance(element, str) and element.strip()][0].replace('%','')
-                if int(percentage) == 0:
-                    count = 0
-                else:
-                    count =round(details['total_ratings'] * (int(percentage) / 100))
-                
-                rating_breakdown.append({
-                    start:{
-                        'percentage' : percentage,
-                        'count' : count
-                    }
-                })
-            except:
-                ...
-        details['rating_breakdown'] = rating_breakdown
     
     # MarketPlace ID
     try:
@@ -658,7 +659,7 @@ def amazon_parser(url,domain,page_html,asin=None):
                         ...
                 brand_story['products'] = products
 
-        details['aplus_content'] = brand_story
+            details['aplus_content'] = brand_story
 
     # Stock Count
     if soup.find(id="availability"):
