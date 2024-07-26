@@ -371,6 +371,7 @@ def amazon_parser(url,domain,page_html,asin=None):
             'text' : soup.find(id="amznStoresBylineLogoTextContainer").get_text().replace('\n',''),
             'url' : soup.find(id="amznStoresBylineLogoTextContainer").find('a')['href']
         }
+
     except:
         details['brand'] = soup.find(id="bylineInfo").text.replace('Brand:','').replace('Visit','').replace('the','').replace('store','').replace('Store','').strip()
         details['sub_title'] = {
@@ -538,8 +539,8 @@ def amazon_parser(url,domain,page_html,asin=None):
         details['specifications'] = specifications
 
     # has_360_view
-    if soup.find(id="image-360-sprites"):
-        details['has_360_view'] = True if soup.find(id="image-360-sprites") else False
+    if soup.select('div#spin360_feature_div script'):
+        details['has_360_view'] = True
 
     # is_bundle
     details['is_bundle'] = True if soup.find(id="bundle-v2-btf-contains-label") else False
@@ -572,6 +573,14 @@ def amazon_parser(url,domain,page_html,asin=None):
                 vals = ','.join([item.text.strip() for item in li.select_one("span.a-text-bold").next_siblings if item.text.strip()])
                 imp_info.append(f"{header} : {vals}")
             details['important_information'] = clean_str(' | '.join(imp_info))
+        elif soup.select("div#important-information div.a-section.content h4"):
+            imp_info = []
+            for li in soup.select("div#important-information div.a-section.content"):
+                header = li.select_one("h4").text.strip()
+                vals = ','.join([item.text.strip() for item in li.select_one("h4").next_siblings if item.text.strip()])
+                imp_info.append(f"{header} : {vals}")
+            details['important_information'] = clean_str(' | '.join(imp_info))
+
         else:
             details['important_information'] = clean_str(soup.find(id="important-information").text.strip())
     
@@ -604,6 +613,52 @@ def amazon_parser(url,domain,page_html,asin=None):
             details['description'] = clean_str('|'.join([i.text.strip() for i in soup.find('h2',string=re.compile('Product Description')).next_siblings if i.text.strip()]).replace('\n','').strip())
         except:
             pass
+
+    # aplus_content
+    if soup.find(id="aplusBrandStory_feature_div"):
+        maybe_brand_story_soup = soup.find(class_="apm-brand-story-carousel-container")
+        if maybe_brand_story_soup:
+            brand_story = {}
+            if maybe_brand_story_soup.select('.apm-brand-story-logo-image img'):
+                brand_story['brand_logo'] =  maybe_brand_story_soup.select_one('.apm-brand-story-logo-image img')['data-src']
+            brand_story['hero_image'] =  maybe_brand_story_soup.select_one('.apm-brand-story-background-image img')['data-src']
+            if maybe_brand_story_soup.select_one('.apm-brand-story-slogan-text'):
+                brand_story['discription'] = clean_str(' | '.join([brand_text.text for brand_text in maybe_brand_story_soup.select_one('.apm-brand-story-slogan-text').children if brand_text.text.strip()]))
+
+            if maybe_brand_story_soup.select('img'):
+                images = []
+                for img in maybe_brand_story_soup.select('img'):
+                    try:
+                        images.append(img['data-src'])
+                    except:
+                        ...
+                brand_story['images'] = images
+            
+            if maybe_brand_story_soup.select('.apm-brand-story-faq-block'):
+                faqs  = []
+                for faq in maybe_brand_story_soup.select('.apm-brand-story-faq-block'):
+                    faqs.append({
+                        'title':clean_str(faq.select_one('h4').text),
+                        'body':clean_str(' | '.join([faq_text.text for faq_text in faq.select('p')]))
+                    })
+                brand_story['faqs'] = faqs
+
+            if maybe_brand_story_soup.select('.apm-brand-story-image-cell a'):
+                products = []
+                for item in maybe_brand_story_soup.select('.apm-brand-story-image-cell a'):
+                    try:
+                        product = {}
+
+                        product['asin'] = unquote(item['href']).split('/dp/')[1].split('/')[0]
+                        product['title'] = item.select_one('img')['alt']
+                        product['link'] = item['href']
+                        product['image'] = item.select_one('img')['data-src']
+                        products.append(product)
+                    except:
+                        ...
+                brand_story['products'] = products
+
+        details['aplus_content'] = brand_story
 
     # Stock Count
     if soup.find(id="availability"):
@@ -667,6 +722,13 @@ def amazon_parser(url,domain,page_html,asin=None):
     # is prime  
     details['is_prime'] = True if soup.select('.prime-details') else False
     details['is_new'] = False if 'Renewed' in details['product_name'] or 'Refurbished' in details['product_name'] else True
+    try:
+        details['brand_store'] ={
+            'id' : details['sub_title']['url'].split('/page/')[-1].split('?')[0],
+            'url': details['sub_title']['url']
+        }
+    except:
+        ...
 
     if soup.find(id="whatsInTheBoxDeck"):
         details['whats_in_the_box'] = ' | '.join(li.text.strip() for li in soup.find(id="whatsInTheBoxDeck").find_all('li'))
