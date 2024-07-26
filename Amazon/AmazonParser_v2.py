@@ -439,6 +439,10 @@ def amazon_parser(url,domain,page_html,asin=None):
     except:
         details['has_coupon'] = False
 
+    # amazons_choice
+    if soup.select_one('div#acBadge_feature_div span.ac-for-text'):
+        details['amazons_choice'] = clean_str(soup.select_one('div#acBadge_feature_div span.ac-for-text').text)
+
     # Rating
     if soup.find('span',attrs={"data-hook":"rating-out-of-text"}):
         details['rating'] = soup.find('span',attrs={"data-hook":"rating-out-of-text"}).text.split('out')[0].strip()
@@ -459,8 +463,29 @@ def amazon_parser(url,domain,page_html,asin=None):
                 if tds:
                     rating_breakdown.append({tds[0].a.text.strip() :{
                         'percentage' : tds[2].text.strip().replace('%',''),
-                        'count' :round(details['total_ratings'] * (int(tds[2].text.strip().replace('%','')) / 100))
+                        'count' :round(details['total_ratings'] * (int(tds[2].text.strip().replace('%','')) / 100)) if int(tds[2].text.strip().replace('%','')) else 0
                     }})
+            except:
+                print(traceback.print_exc())
+                ...
+        details['rating_breakdown'] = rating_breakdown
+    elif soup.select('ul#histogramTable'):
+        rating_breakdown = []
+        for row in soup.select('ul#histogramTable li'):
+            try:
+                start= [element.strip() for element in row.find('div', class_='a-section a-spacing-none a-text-left aok-nowrap').contents if isinstance(element, str) and element.strip()][0]
+                percentage =  [element.strip() for element in row.find('div', class_='a-section a-spacing-none a-text-right aok-nowrap').contents if isinstance(element, str) and element.strip()][0].replace('%','')
+                if int(percentage) == 0:
+                    count = 0
+                else:
+                    count =round(details['total_ratings'] * (int(percentage) / 100))
+                
+                rating_breakdown.append({
+                    start:{
+                        'percentage' : percentage,
+                        'count' : count
+                    }
+                })
             except:
                 ...
         details['rating_breakdown'] = rating_breakdown
@@ -511,6 +536,10 @@ def amazon_parser(url,domain,page_html,asin=None):
     specifications = get_specifications(soup)
     if specifications:
         details['specifications'] = specifications
+
+    # has_360_view
+    if soup.find(id="image-360-sprites"):
+        details['has_360_view'] = True if soup.find(id="image-360-sprites") else False
 
     # is_bundle
     details['is_bundle'] = True if soup.find(id="bundle-v2-btf-contains-label") else False
@@ -588,6 +617,11 @@ def amazon_parser(url,domain,page_html,asin=None):
     else:
         in_stock = 'No'
     details['in_stock'] = in_stock
+
+    # subscribeAndSaveDiscountPercentage
+    if soup.select_one('#snsDiscountPill  span.pillLightUp'):
+        details['subscribeAndSaveDiscountPercentage'] = soup.select_one('#snsDiscountPill  span.pillLightUp').text.replace('%','').strip()
+        details['subscribeAndSaveMaximumDiscountPrice'] = soup.select_one('#sns-tiered-price span.reinventPriceAccordionT2 span.a-offscreen').text.strip()
 
     if soup.select('#dealBadgeSupportingText'):
         details['deal_badge'] = soup.select('#dealBadgeSupportingText')[0].text.strip()
@@ -708,5 +742,5 @@ def amazon_parser(url,domain,page_html,asin=None):
     top_reviews = get_top_reviews(soup,domain)
     if top_reviews:
         details['top_reviews'] = top_reviews
-        
+
     return details
