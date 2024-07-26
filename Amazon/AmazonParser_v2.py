@@ -224,8 +224,8 @@ def get_specifications(soup):
 
     sepecification = {}
     if soup.select('div#productDetails_feature_div div.a-column.a-span6'):
-        sub_spec = {}
         for spec in soup.select('div#productDetails_feature_div div.a-column.a-span6'):
+            sub_spec = {}
             if not spec.select('table tr'):continue
             if spec.select('table#productDetails_feedback_sections'):
                 spec.select_one('table#productDetails_feedback_sections').extract()
