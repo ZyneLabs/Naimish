@@ -2,6 +2,10 @@ from fastapi import FastAPI, Query, Response
 from AmazonScraper import amazon_scraper
 from AmazonParser_v2 import *
 from pydantic import BaseModel
+from pymongo.mongo_client import MongoClient
+from datetime import datetime
+mongo = MongoClient()
+collection = mongo["Amazon"]["urls"]
 
 class ScrapeModel(BaseModel):
     url: str
@@ -21,7 +25,7 @@ async def amazon(body: ScrapeModel, response: Response):
     if token != "Testing Naimish Amazon... :)":
         response.status_code = 401
         return None
-        
+    collection.insert_one({"url": url, "timestamp": datetime.now()}}
     if 'amazon.com' in url or 'amazon.ca' in url:
         if '?th' in url:
             url +='&psc=1'
