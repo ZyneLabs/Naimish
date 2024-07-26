@@ -1,6 +1,11 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Response
 from AmazonScraper import amazon_scraper
 from AmazonParser_v2 import *
+from pydantic import BaseModel
+
+class ScrapeModel(BaseModel):
+    url: str
+    token: str
 
 app = FastAPI()
 
@@ -8,9 +13,15 @@ app = FastAPI()
 async def root():
     return {"message": "Hello World"}
 
-@app.get("/amazon/")
-async def amazon(url: str):
+@app.post("/amazon/")
+async def amazon(body: ScrapeModel, response: Response):
+    url = body.url
+    token = body.token
 
+    if token != "Testing Naimish Amazon... :)":
+        response.status_code = 401
+        return None
+        
     if 'amazon.com' in url or 'amazon.ca' in url:
         if '?th' in url:
             url +='&psc=1'
