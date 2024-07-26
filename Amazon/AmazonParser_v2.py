@@ -256,21 +256,38 @@ def get_product_details(soup):
     
     if soup.select('div#productOverview_feature_div'):
         for row in soup.select('div#productOverview_feature_div tr'):
-            head ,val = row.find_all('td')
-            product_details[clean_str(head.text.strip())] = clean_str(val.text.strip())
+            try:
+                head ,val = row.find_all('td')
+                product_details[clean_str(head.text.strip())] = clean_str(val.text.strip())
+            except:...
 
     if soup.find(id="productFactsDesktopExpander"):
         for row in soup.select('div#productFactsDesktopExpander div.product-facts-detail'):
-            head ,val = clean_str(row.find('div',class_='a-fixed-left-grid-col a-col-left').text),clean_str(row.find('div',class_='a-fixed-left-grid-col a-col-right').text)
-            product_details[head] = val
+            try:
+                head ,val = clean_str(row.find('div',class_='a-fixed-left-grid-col a-col-left').text),clean_str(row.find('div',class_='a-fixed-left-grid-col a-col-right').text)
+                product_details[head] = val
+            except:
+                ...
 
     if soup.find(id="detailBullets_feature_div"):
         for row in soup.select('div#detailBullets_feature_div li span.a-list-item'):
             if row.find('span'):
-                spans = row.find_all('span')
-                head ,val = clean_str(spans[0].text.replace(':','')),clean_str(spans[1].text)
-                product_details[head] = val
+                try:
+                    spans = row.find_all('span')
+                    head ,val = clean_str(spans[0].text.replace(':','')),clean_str(spans[1].text)
+                    product_details[head] = val
+                except:
+                    ...
 
+    if soup.select('div#glance_icons_div'):
+        try:
+            head = [clean_str(i.text) for i in soup.select('div#glance_icons_div span.a-size-base.handle-overflow.a-text-bold') if i.text]
+            val = [clean_str(i.text) for i in soup.select('div#glance_icons_div span.a-size-base.handle-overflow.a-text-bold ~ span') if i.text]
+
+            product_details = product_details | dict(zip(head,val))
+        except:
+            ...
+        
     return product_details
 
 def get_protection_plan(soup):
