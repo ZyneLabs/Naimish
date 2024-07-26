@@ -25,7 +25,7 @@ async def amazon(body: ScrapeModel, response: Response):
     if token != "Testing Naimish Amazon... :)":
         response.status_code = 401
         return None
-    collection.insert_one({"url": url, "timestamp": datetime.now()}}
+    collection.insert_one({"url": url, "timestamp": datetime.now()})
     if 'amazon.com' in url or 'amazon.ca' in url:
         if '?th' in url:
             url +='&psc=1'
