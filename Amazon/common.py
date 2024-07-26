@@ -4,6 +4,7 @@ import requests
 from urllib.parse import urlencode
 import json
 from os import getenv
+import os
 from random import randint
 import traceback
 
@@ -50,7 +51,7 @@ def send_req_syphoon(
     while retry_count < total_retries:
         try:
             return requests.post(
-                "https://api.syphoon.com", json=payload, headers=headers, verify=False
+                "https://api.syphoon.com", json=payload, headers=headers,
             )
         except Exception as ex:
             retry_count += 1
@@ -68,7 +69,7 @@ def clean_str(input_str, sep="|"):
     if type(input_str) is not str:
         return input_str
 
-    input_str = re.sub(r"\s+", " ", input_str).replace("\n", sep).replace("\u200e", '')
+    input_str = re.sub(r"\s+", " ", input_str).replace("\n", sep).replace("\u200e", '').replace('\u200f','')
 
     return input_str.strip()
 

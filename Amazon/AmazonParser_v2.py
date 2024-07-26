@@ -14,7 +14,7 @@ def get_top_reviews(soup,domain):
                 review['title'] = review_soup.find('span',attrs={"data-hook":"review-title"}).text.strip()
             
             review['body'] = review_soup.find('div',attrs={"data-hook":"review-collapsed"}).text.strip()
-            review['body_html']  = review_soup.find('span',attrs={'data-hook':"review-body"}).prettify()
+            review['body_html']  =clean_str(review_soup.find('span',attrs={'data-hook':"review-body"}).prettify())
 
             if review_soup.find('a',attrs={"data-hook":"review-title"}):
                 review['link'] ='https://'+domain+review_soup.find('a',attrs={"data-hook":"review-title"})['href']
@@ -221,10 +221,10 @@ def get_price_info(soup):
     return price_info
 
 def get_specifications(soup):
-    sepecification = ''
+
+    sepecification = {}
     if soup.select('div#productDetails_feature_div div.a-column.a-span6'):
-        sepecification = {}
-       
+        sub_spec = {}
         for spec in soup.select('div#productDetails_feature_div div.a-column.a-span6'):
             if not spec.select('table tr'):continue
             if spec.select('table#productDetails_feedback_sections'):
@@ -232,30 +232,22 @@ def get_specifications(soup):
 
             if spec.find('h1') and 'feedback' not in spec.find('h1').text.lower() and 'warranty' not in spec.find('h1').text.lower():
                 header = spec.find('h1').text
-                val = []
                 for item in spec.find_all('tr'):
-                    val.append(f"{item.find('th').text.strip()} : {item.find('td').text.strip()}")
-                sepecification[header] =clean_str(' | '.join(val).strip())
-            
-            else:
-                val = []
-                for item in spec.find_all('tr'):
-                    val.append(f"{item.find('th').text.strip()} : {item.find('td').text.strip()}")
+                    sub_spec[clean_str(item.find('th').text)] = clean_str(item.find('td').text)
+                sepecification[header] = sub_spec
 
-                sepecification =clean_str(' | '.join(val).strip())
-              
+            else:
+                for item in spec.find_all('tr'):
+                    sepecification[clean_str(item.find('th').text)] = clean_str(item.find('td').text)
+
     elif soup.find('table',id='productDetails_techSpec_section_1'):
-        val = []
         for item in soup.find('table',id='productDetails_techSpec_section_1').find_all('tr'):
-            val.append(f"{item.find('th').text.strip()} : {item.find('td').text.strip()}")
-        sepecification = clean_str(' | '.join(val).strip())
-   
+            sepecification[clean_str(item.find('th').text)] = clean_str(item.find('td').text)
+        
     elif soup.select('div.a-column.a-span6.block-content.block-type-table tr'):
-        val = []
         for item in soup.select('div.a-column.a-span6.block-content.block-type-table tr'):
-            val.append(f"{item.find('td').text.strip()} : {item.find_all('td')[1].text.strip()}")
-        sepecification = clean_str(' | '.join(val).strip())
-   
+            sepecification[clean_str(item.find('td').text)] = clean_str(item.find_all('td')[1].text)
+
     return sepecification
 
 
@@ -265,21 +257,21 @@ def get_product_details(soup):
     if soup.select('div#productOverview_feature_div'):
         for row in soup.select('div#productOverview_feature_div tr'):
             head ,val = row.find_all('td')
-            product_details[head.text.strip()] = val.text.strip()
+            product_details[clean_str(head.text.strip())] = clean_str(val.text.strip())
 
     if soup.find(id="productFactsDesktopExpander"):
         for row in soup.select('div#productFactsDesktopExpander div.product-facts-detail'):
-            head ,val = row.find('div',class_='a-fixed-left-grid-col a-col-left').text.strip(),row.find('div',class_='a-fixed-left-grid-col a-col-right').text.strip()
+            head ,val = clean_str(row.find('div',class_='a-fixed-left-grid-col a-col-left').text),clean_str(row.find('div',class_='a-fixed-left-grid-col a-col-right').text)
             product_details[head] = val
 
     if soup.find(id="detailBullets_feature_div"):
         for row in soup.select('div#detailBullets_feature_div li span.a-list-item'):
             if row.find('span'):
                 spans = row.find_all('span')
-                head ,val = spans[0].text.strip(),spans[1].text.strip()
+                head ,val = clean_str(spans[0].text.replace(':','')),clean_str(spans[1].text)
                 product_details[head] = val
 
-    return clean_str(' | '.join([f"{i} : {product_details[i]}" for i in product_details])).replace(' :  : ',' : ')
+    return product_details
 
 def get_protection_plan(soup):
     plans = []
@@ -509,30 +501,33 @@ def amazon_parser(url,domain,page_html,asin=None):
         if 'Proposition 65' in soup.find(id="legal_feature_div").text:
             details['proposition_65_warning'] = True
     
-    # Specification
-    specifications = get_specifications(soup)
-    if specifications:
-        details['specifications'] = specifications
-
     # product_details
     
     product_details = get_product_details(soup)
     if product_details:
         details['product_details'] = product_details
 
+    # Specification
+    specifications = get_specifications(soup)
+    if specifications:
+        details['specifications'] = specifications
+
     # is_bundle
     details['is_bundle'] = True if soup.find(id="bundle-v2-btf-contains-label") else False
     if details['is_bundle']:
         details['bundle_contents'] = get_bundle_contents(soup)
 
-    # about this item
+    #feature_bullets
     if soup.find(id="productFactsDesktopExpander"):
         details['feature_bullets'] = clean_str(' | '.join([i.text.strip() for i in soup.find('h3',string=re.compile('About this item')).find_next_siblings('ul',class_="a-unordered-list a-vertical a-spacing-small")]))
     elif soup.find(id="featurebullets_feature_div"):
         details['feature_bullets'] =clean_str(' | '.join([i.text.strip() for i in soup.select('div#featurebullets_feature_div ul li')]))
     
     if soup.find(id="variation_size_name"):
-        details['size_variant'] = soup.find(id="variation_size_name").find('span',class_='selection').text.strip()
+        if soup.find(id="variation_size_name").find('span',class_='selection'):
+            details['size_variant'] = soup.find(id="variation_size_name").find('span',class_='selection').text.strip()
+        elif soup.select_one('div#variation_size_name option[selected]'):
+            details['size_variant'] = soup.select_one('div#variation_size_name option[selected]').text.strip()
 
     # ingredients
     if soup.find(id="nic-ingredients-content"):
@@ -642,13 +637,9 @@ def amazon_parser(url,domain,page_html,asin=None):
     if soup.find(id="whatsInTheBoxDeck"):
         details['whats_in_the_box'] = ' | '.join(li.text.strip() for li in soup.find(id="whatsInTheBoxDeck").find_all('li'))
 
-    # Top reviews
-    top_reviews = get_top_reviews(soup,domain)
-    if top_reviews:
-        details['top_reviews'] = top_reviews
 
     # Product guides and documents
-    if soup.find(id="productDocuments_feature_div"):
+    if soup.select("#productDocuments_feature_div a"):
         details['product_guides_and_documents'] = [
             {
                 'title' : doc.text.strip(),
@@ -713,4 +704,9 @@ def amazon_parser(url,domain,page_html,asin=None):
     if releted_product:
         details['releted_product'] = releted_product
 
+    # Top reviews
+    top_reviews = get_top_reviews(soup,domain)
+    if top_reviews:
+        details['top_reviews'] = top_reviews
+        
     return details
