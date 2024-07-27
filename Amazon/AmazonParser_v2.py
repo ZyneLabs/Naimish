@@ -13,7 +13,7 @@ def get_top_reviews(soup,domain):
             else:
                 review['title'] = review_soup.find('span',attrs={"data-hook":"review-title"}).text.strip()
             
-            review['body'] = review_soup.find('div',attrs={"data-hook":"review-collapsed"}).text.strip()
+            review['body'] = clean_str(review_soup.find('div',attrs={"data-hook":"review-collapsed"}).text)
             review['body_html']  =clean_str(review_soup.find('span',attrs={'data-hook':"review-body"}).prettify())
 
             if review_soup.find('a',attrs={"data-hook":"review-title"}):
@@ -29,14 +29,14 @@ def get_top_reviews(soup,domain):
             
             if review_soup.find('span',attrs={'data-hook':"review-date"}):
                 review['date'] ={
-                    "raw" : review_soup.find('span',attrs={'data-hook':"review-date"}).text.strip(),
+                    "raw" : clean_str(review_soup.find('span',attrs={'data-hook':"review-date"}).text),
                     "date" : datetime.strptime(review_soup.find('span',attrs={'data-hook':"review-date"}).text.split('on')[1].strip(),'%B %d, %Y').strftime('%Y-%m-%d')
                 }
                 review['review_country'] = review_soup.find('span',attrs={'data-hook':"review-date"}).text.split('Reviewed in')[1].split('on')[0].strip().strip('the ')
                 
             if review_soup.find('div',attrs={"data-hook":"genome-widget"}):
                 review['profile'] = {
-                    'name':review_soup.select_one("div[data-hook='genome-widget'] span.a-profile-name").text.strip(),
+                    'name':clean_str(review_soup.select_one("div[data-hook='genome-widget'] span.a-profile-name").text),
                 }
                 if review_soup.select_one("div[data-hook='genome-widget'] a.a-profile"):
                     review['profile']['link'] = 'https://'+domain+review_soup.select_one("div[data-hook='genome-widget'] a.a-profile")['href']
@@ -214,7 +214,8 @@ def get_price_info(soup):
                 price_info['list_price'] = soup.select_one('span.a-price.a-text-price.a-size-medium.apexPriceToPay span.a-offscreen').text.replace('₹','').replace('$','').strip()
             elif soup.select_one('div#corePrice_desktop span.aok-offscreen'):
                 price_info['list_price'] = soup.select_one('div#corePrice_desktop span.aok-offscreen').text.replace('₹','').replace('$','').strip()
-
+        elif soup.find(id="gc-live-preview-amount"):
+            price_info['list_price'] = soup.select_one('#gc-live-preview-amount').text.replace('₹','').replace('$','').strip()
     except:
         ...
 
@@ -239,6 +240,18 @@ def get_specifications(soup):
             else:
                 for item in spec.find_all('tr'):
                     sepecification[clean_str(item.find('th').text)] = clean_str(item.find('td').text)
+    elif soup.select('#technicalSpecifications_feature_div tr'):
+        for item in soup.select('#technicalSpecifications_feature_div tr'):
+            try:
+                sepecification[clean_str(item.find('th').text)] = clean_str(item.find('td').text)
+            except:
+                ...
+    elif soup.select('#rich_product_information li'):
+        for item in soup.select('#rich_product_information li'):
+            try:
+                sepecification[clean_str(item.select_one('div.rpi-attribute-label').text)] = clean_str(item.select_one('div.rpi-attribute-value').text)
+            except:
+                ...
 
     elif soup.find('table',id='productDetails_techSpec_section_1'):
         for item in soup.find('table',id='productDetails_techSpec_section_1').find_all('tr'):
@@ -292,18 +305,16 @@ def get_product_details(soup):
 
 def get_protection_plan(soup):
     plans = []
-    cnt=1
-    for row in soup.select('div#abbWrapper  div.abbListItem'):
+    for row in soup.select('div#mbb_feature_div  div.abbListItem'):
         try:
             plan = {}
-            plan['asin'] = row.select_one(f'input[name="asin.{cnt}"]')['value']
+            plan['asin'] = [inp for inp in row.select('input') if 'asin' in inp.get('name')][0]['value']
             plan['title'] = row.find(id='mbbPopoverLink').text
             plan['price'] = row.find('span',class_='a-color-price').text
             plans.append(plan)
         except:
-           ...
+           print(traceback.print_exc())
 
-        cnt+=1
     return plans
 
 def get_bundles(soup):
@@ -353,6 +364,7 @@ def  get_bundle_contents(soup):
             bundle_contents.append(bundle)
         except:
            ...
+
     return bundle_contents
 
 
@@ -375,11 +387,21 @@ def amazon_parser(url,domain,page_html,asin=None):
             'text' : maybe_search_alias.text.strip(),
             'value' : maybe_search_alias['value'].split('=')[1]
         }
+       
     # Product Name
+    
     if soup.find(id='title'):
-        details['product_name'] = soup.find(id='title').get_text().strip()
+        details['product_name'] =clean_str(soup.find(id='title').text)
     else:
-        return {'message':f'Product name not found {url}'}
+        page_html = search_text_between(page_html,'<html class="a-no-js" data-19ax5a9jf="dingo">','</html>')
+        if page_html:
+            soup = BeautifulSoup(page_html, 'lxml')
+            if soup.find(id='gc-asin-title'):
+                details['product_name'] =clean_str(soup.find(id='gc-asin-title').text)
+            else:
+                return {'message':f'Product name not found {url}'}
+        else:
+            return {'message':f'Product name not found {url}'}
     
     # Brand
     try:
@@ -390,11 +412,34 @@ def amazon_parser(url,domain,page_html,asin=None):
         }
 
     except:
-        details['brand'] = soup.find(id="bylineInfo").text.replace('Brand:','').replace('Visit','').replace('the','').replace('store','').replace('Store','').strip()
-        details['sub_title'] = {
-            'text' : soup.find(id="bylineInfo").text,
-            'url' : soup.find(id="bylineInfo")['href']
-        }
+        if soup.find('a',id="bylineInfo"):
+            details['brand'] = soup.find(id="bylineInfo").text.replace('Brand:','').replace('Visit','').replace('the','').replace('store','').replace('Store','').strip()
+            details['sub_title'] = {
+                'text' : soup.find(id="bylineInfo").text,
+                'url' : soup.find(id="bylineInfo")['href']
+            }
+        maybe_author =  soup.select('#bylineInfo span.author a')
+        if maybe_author:
+            authors = []
+            for author in maybe_author:
+                authors.append({
+                'name':clean_str(author.text),
+                'link':author['href']
+                })
+            if len(authors)>1:
+                details['authors'] = authors
+            else:
+                details['author']  =authors[0]
+    
+    maybe_format = soup.select_one('#tmmSwatches .selected span.slot-title')
+    if maybe_format:
+        details['format'] = maybe_format.text.strip()
+    elif soup.find('span',string=re.compile('Format:')):
+        details['format'] = soup.find('span',string=re.compile('Format:')).find_next_sibling('span').text
+
+    maybe_audio_sample = soup.select_one('div[data-audioid="audImgSample"]')
+    if maybe_audio_sample:
+        details['audio_sample'] = maybe_audio_sample.get('data-audiosource')
 
     # protection_plans 
     protections = get_protection_plan(soup)
@@ -527,7 +572,6 @@ def amazon_parser(url,domain,page_html,asin=None):
             ]
         details['categories_flat'] = " > ".join([c['name'] for c in details['categories']])
 
-    details['price_info'] = get_price_info(soup)
     
     # Variants    
     variation_info = get_variations(soup)
@@ -536,6 +580,17 @@ def amazon_parser(url,domain,page_html,asin=None):
         details['color_grouping'] = variation_info['color_grouping']
         details['current_selection'] = variation_info['current_selection']
         details['variant_asins'] =','.join([asin for asin in variation_info['asins']])
+    
+    maybe_formats= soup.select('#mediamatrix_feature_div span.format  a')
+    if maybe_formats:
+        variants = []
+        for format in maybe_formats:
+            try:
+                variants.append(format['href'].split('/dp/')[1].split('/')[0].split('?')[0])
+            except:
+                ... 
+        if variants:
+            details['variant_asins'] = ','.join(variants)
 
     # Color of Variant
     if soup.find(id="variation_color_name"):
@@ -544,12 +599,46 @@ def amazon_parser(url,domain,page_html,asin=None):
     if soup.find(id="legal_feature_div"):
         if 'Proposition 65' in soup.find(id="legal_feature_div").text:
             details['proposition_65_warning'] = True
-    
-    # product_details
+
+    # series
+    maybe_series_text = search_text_between(page_html,'id="seriesBulletWidget_feature_div"','</div>')
+    if maybe_series_text:
+        maybe_series_soup = BeautifulSoup('<div'+maybe_series_text,'html.parser').find('a')
+        if maybe_series_soup:
+            details['series'] = {
+                'index': clean_str(maybe_series_soup.text.split(':')[0]),
+                'title': clean_str(maybe_series_soup.text),
+                'link':maybe_series_soup['href'],
+                'asin':maybe_series_soup['href'].split('/dp/')[1].split('/')[0].split('?')[0]
+
+            }
+    # Collectible info
+    maybe_collectible_soup =soup.select("#collectiblesKeyInformation_feature_div tr")
+    if maybe_collectible_soup:
+        collectible_info = {}
+        try:
+            for row in maybe_collectible_soup:
+                collectible_info[clean_str(row.find('th').text)] = clean_str(row.find('td').text)
+        except:...
+        details['collectible_info'] = collectible_info
+    # product_details   
     
     product_details = get_product_details(soup)
     if product_details:
         details['product_details'] = product_details
+
+    # additional Details
+
+    if soup.find(id="provenance-certifications"):
+        additadditional_details = []
+        for item in soup.select('#provenance-certifications div.provenance-certifications-row-description'):
+            try:
+                additadditional_details.append({
+                    'name':clean_str(item.find('div').text),
+                    'value': clean_str(item.find('span',class_='a-truncate-full').text)
+                      })
+            except:...
+        details['additional_details'] = additadditional_details
 
     # Specification
     specifications = get_specifications(soup)
@@ -632,6 +721,10 @@ def amazon_parser(url,domain,page_html,asin=None):
         except:
             pass
 
+    # book_description
+    if soup.select('#bookDescription_feature_div'):
+        details['book_description'] = clean_str(soup.select_one('div[data-a-expander-name="book_description_expander"]').text)
+
     # aplus_content
     if soup.find(id="aplusBrandStory_feature_div"):
         maybe_brand_story_soup = soup.find(class_="apm-brand-story-carousel-container")
@@ -641,7 +734,7 @@ def amazon_parser(url,domain,page_html,asin=None):
                 brand_story['brand_logo'] =  maybe_brand_story_soup.select_one('.apm-brand-story-logo-image img')['data-src']
             brand_story['hero_image'] =  maybe_brand_story_soup.select_one('.apm-brand-story-background-image img')['data-src']
             if maybe_brand_story_soup.select_one('.apm-brand-story-slogan-text'):
-                brand_story['discription'] = clean_str(' | '.join([brand_text.text for brand_text in maybe_brand_story_soup.select_one('.apm-brand-story-slogan-text').children if brand_text.text.strip()]))
+                brand_story['description'] = clean_str(' | '.join([brand_text.text for brand_text in maybe_brand_story_soup.select_one('.apm-brand-story-slogan-text').children if brand_text.text.strip()]))
 
             if maybe_brand_story_soup.select('img'):
                 images = []
@@ -678,6 +771,8 @@ def amazon_parser(url,domain,page_html,asin=None):
 
             details['aplus_content'] = brand_story
 
+    details['price_info'] = get_price_info(soup)
+    
     # Stock Count
     if soup.find(id="availability"):
         in_stock_text = soup.find(id="availability").text.strip()    
@@ -733,9 +828,9 @@ def amazon_parser(url,domain,page_html,asin=None):
 
     # Best Sellers Rank
     if soup.find('th',string=re.compile('Best Sellers Rank')):
-        details['best_seller_rank'] = soup.find('th',string=re.compile('Best Sellers Rank')).find_next_sibling('td').text.strip()
+        details['best_seller_rank'] = clean_str(soup.find('th',string=re.compile('Best Sellers Rank')).find_next_sibling('td').text.strip())
     elif soup.find('span',string=re.compile('Best Sellers Rank')):
-        details['best_seller_rank'] = soup.find('span',string=re.compile('Best Sellers Rank')).parent.text.replace('Best Sellers Rank:','').strip()
+        details['best_seller_rank'] = clean_str(soup.find('span',string=re.compile('Best Sellers Rank')).parent.text.replace('Best Sellers Rank:','').strip())
 
     # is prime  
     details['is_prime'] = True if soup.select('.prime-details') else False
