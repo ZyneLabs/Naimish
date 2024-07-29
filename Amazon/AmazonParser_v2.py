@@ -194,7 +194,7 @@ def get_price_info(soup):
     price_info = {}
     try:
         if soup.find(id="corePriceDisplay_desktop_feature_div"):
-            if soup.find(class_='savingsPercentage'):
+            if soup.select_one('#corePriceDisplay_desktop_feature_div .savingsPercentage'):
                 price_info['discount_percentage']  = soup.find(class_="a-section a-spacing-none aok-align-center aok-relative").find(class_='savingsPercentage').text.replace('-','')
                 price_info['promo_price']  = soup.find(class_="a-section a-spacing-none aok-align-center aok-relative").find('span',class_='priceToPay').text.replace('₹','').replace('$','').strip()
                 price_info['list_price'] = soup.find(class_="basisPrice").find(class_='a-price a-text-price').find(class_='a-offscreen').text.replace('₹','').replace('$','').strip()
@@ -313,7 +313,7 @@ def get_protection_plan(soup):
             plan['price'] = row.find('span',class_='a-color-price').text
             plans.append(plan)
         except:
-           print(traceback.print_exc())
+           ...
 
     return plans
 
@@ -524,7 +524,6 @@ def amazon_parser(url,domain,page_html,asin=None):
                             'count' :round(details['total_ratings'] * (int(tds[2].text.strip().replace('%','')) / 100)) if int(tds[2].text.strip().replace('%','')) else 0
                         }})
                 except:
-                    print(traceback.print_exc())
                     ...
             details['rating_breakdown'] = rating_breakdown
         elif soup.select('ul#histogramTable'):
@@ -577,7 +576,6 @@ def amazon_parser(url,domain,page_html,asin=None):
     variation_info = get_variations(soup)
     if variation_info:
         details['variants'] = variation_info['variants']
-        details['color_grouping'] = variation_info['color_grouping']
         details['current_selection'] = variation_info['current_selection']
         details['variant_asins'] =','.join([asin for asin in variation_info['asins']])
     
