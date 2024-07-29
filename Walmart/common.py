@@ -1,22 +1,15 @@
-import requests
 from bs4 import BeautifulSoup
 import re
 import requests
 from urllib.parse import urlencode
 import json
 from os import getenv
-from pymongo.mongo_client import MongoClient
-from datetime import datetime
-import traceback
+import os
 from random import randint
-from rq import Queue, Retry
-from redis import Redis
+import traceback
+from datetime import datetime
 
 API_KEYS = getenv('API_KEYS').split(',')
-
-MONGO_URI = getenv('MONGODB_URI')
-PROXY_VENDOR = getenv('PROXY_VENDOR')
-
 
 def send_req_syphoon(
     scraper_class, method, url, params=None, headers=None, payload=None, cookies=None, total_retries=5
@@ -39,6 +32,7 @@ def send_req_syphoon(
         "key": API_KEYS[scraper_class],
         "url": url,
         "method": method,
+        # "country_code": "us",
     }
     
     if cookies is not None:
@@ -49,25 +43,40 @@ def send_req_syphoon(
     while retry_count < total_retries:
         try:
             return requests.post(
-                "https://api.syphoon.com", json=payload, headers=headers, verify=False
+                "https://api.syphoon.com", json=payload, headers=headers,
             )
         except Exception as ex:
             retry_count += 1
 
-headers = {
-    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-    'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
-    'cache-control': 'max-age=0',
-    'downlink': '3.8',
-    'dpr': '1',
-    'priority': 'u=0, i',
-    'sec-ch-ua': '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
-    'sec-ch-ua-mobile': '?0',
-    'sec-ch-ua-platform': '"Linux"',
-    'sec-fetch-dest': 'document',
-    'sec-fetch-mode': 'navigate',
-    'sec-fetch-site': 'same-origin',
-    'sec-fetch-user': '?1',
-    'upgrade-insecure-requests': '1',
-    'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-}
+
+def get_digit_groups(input_str):
+    if input_str is None:
+        return []
+    return re.findall(r'\d+', input_str)
+
+def clean_str(input_str, sep="|"):
+    if input_str is None:
+        return ""
+
+    if type(input_str) is not str:
+        return input_str
+
+    input_str = re.sub(r"\s+", " ", input_str).replace("\n", sep).replace("\u200e", '').replace('\u200f','')
+
+    return input_str.strip()
+
+def get_domain_name(url):
+    pattern = re.compile(r'https?://(?:www\.)?([^/]+)')
+    match = pattern.search(url)
+    
+    if match:
+        return match.group(1)
+    return None
+
+def search_text_between(text, start, end):
+    pattern = re.compile(f'{re.escape(start)}(.*?){re.escape(end)}', re.DOTALL)
+    match = re.search(pattern, text)
+    if match:
+        return match.group(1)
+    else:
+        return None

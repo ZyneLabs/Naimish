@@ -1,0 +1,6 @@
+fastapi
+requests
+beautifulsoup4
+pymongo
+redis
+rq
