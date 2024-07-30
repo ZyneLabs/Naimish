@@ -1,11 +1,11 @@
 from fastapi import FastAPI, Query, Response
 from WalmartScraper import walmart_scraper
-from Walmart_Parser_v2 import walmert_parser,get_domain_name
+from Walmart_Parser_v2 import walmert_parser
 from pydantic import BaseModel
 from pymongo.mongo_client import MongoClient
 from datetime import datetime
 # mongo = MongoClient()
-# collection = mongo["Amazon"]["urls"]
+# collection = mongo["Walmart"]["urls"]
 
 class ScrapeModel(BaseModel):
     url: str
@@ -26,10 +26,9 @@ async def walmart(body: ScrapeModel, response: Response):
         response.status_code = 401
         return None
     # collection.insert_one({"url": url, "timestamp": datetime.now()})
-    if 'walmart.com' in url or 'wamart.ca' in url:
+    if 'walmart.com' in url or 'walmart.ca' in url:
        
         pid = url.split('/')[-1].split('?')[0]
-        domain = get_domain_name(url)
         return walmert_parser(url,walmart_scraper(url,pid))
     else:
         return {"message": f"Invalid url {url}"}
