@@ -1,5 +1,5 @@
-from common import *
-
+from bs4 import BeautifulSoup
+import json
 
 def get_variant_details(product_json,details):
     
@@ -290,7 +290,3 @@ def walmert_parser(product_url,html):
 
     details['product_info'] = product
     return details
-
-
-json.dump(
-    walmert_parser('test',open('test.html').read()),open('response.json','w',encoding='utf-8'),indent=4)
