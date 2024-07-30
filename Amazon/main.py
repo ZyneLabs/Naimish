@@ -51,7 +51,7 @@ async def walmart(body: ScrapeModel, response: Response):
     
     page_response  = walmart_scraper(url)
     
-    walmart_collection.insert_one({"url": url, "timestamp": datetime.now()})
+    walmart_collection.insert_one({"url": url, "timestamp": datetime.now(), "token": token})
 
     if page_response.status_code == 200:
         return walmert_parser(url,page_response.text)
@@ -68,7 +68,7 @@ async def amazon(body: ScrapeModel, response: Response):
         response.status_code = 401
         return None
     domain = get_domain_name(url)
-    amazon_collection.insert_one({"url": url, "timestamp": datetime.now()})
+    amazon_collection.insert_one({"url": url, "timestamp": datetime.now(), "token": token})
     if domain in amazon_whitelist:
         if '?th' in url:
             url +='&psc=1'
