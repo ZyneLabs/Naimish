@@ -30,8 +30,11 @@ def get_top_reviews(soup,domain):
             if review_soup.find('span',attrs={'data-hook':"review-date"}):
                 review['date'] ={
                     "raw" : clean_str(review_soup.find('span',attrs={'data-hook':"review-date"}).text),
-                    "date" : datetime.strptime(review_soup.find('span',attrs={'data-hook':"review-date"}).text.split('on')[1].strip(),'%B %d, %Y').strftime('%Y-%m-%d')
                 }
+                try:
+                    review["date"] = datetime.strptime(review_soup.find('span',attrs={'data-hook':"review-date"}).text.split('on')[1].strip(),'%B %d, %Y').strftime('%Y-%m-%d')
+                except:
+                    review["date"] = datetime.strptime(review_soup.find('span',attrs={'data-hook':"review-date"}).text.split('on')[1].strip(),'%d %B %Y').strftime('%Y-%m-%d')
                 review['review_country'] = review_soup.find('span',attrs={'data-hook':"review-date"}).text.split('Reviewed in')[1].split('on')[0].strip().strip('the ')
                 
             if review_soup.find('div',attrs={"data-hook":"genome-widget"}):
@@ -54,6 +57,7 @@ def get_top_reviews(soup,domain):
             review['is_global_review']  = True if review_soup.find_parent('div',class_='global-reviews-content') else False
             reviews.append(review)
         except Exception as e:
+            print(traceback.print_exc())
             ...
 
     return reviews
@@ -196,26 +200,26 @@ def get_price_info(soup):
         if soup.find(id="corePriceDisplay_desktop_feature_div"):
             if soup.select_one('#corePriceDisplay_desktop_feature_div .savingsPercentage'):
                 price_info['discount_percentage']  = soup.find(class_="a-section a-spacing-none aok-align-center aok-relative").find(class_='savingsPercentage').text.replace('-','')
-                price_info['promo_price']  = soup.find(class_="a-section a-spacing-none aok-align-center aok-relative").find('span',class_='priceToPay').text.replace('₹','').replace('$','').strip()
-                price_info['list_price'] = soup.find(class_="basisPrice").find(class_='a-price a-text-price').find(class_='a-offscreen').text.replace('₹','').replace('$','').strip()
+                price_info['promo_price']  = soup.find(class_="a-section a-spacing-none aok-align-center aok-relative").find('span',class_='priceToPay').text.strip()
+                price_info['list_price'] = soup.find(class_="basisPrice").find(class_='a-price a-text-price').find(class_='a-offscreen').text.strip()
             
             elif soup.select_one('span.a-price.reinventPricePriceToPayMargin.priceToPay') and soup.select_one('span.a-price.reinventPricePriceToPayMargin.priceToPay span.a-offscreen').text.strip():
-                price_info['list_price'] = soup.select_one('span.a-price.reinventPricePriceToPayMargin.priceToPay span.a-offscreen').text.replace('₹','').replace('$','').strip()
+                price_info['list_price'] = soup.select_one('span.a-price.reinventPricePriceToPayMargin.priceToPay span.a-offscreen').text.strip()
             elif soup.select_one('div#corePriceDisplay_desktop_feature_div span.aok-offscreen'):
-                price_info['list_price'] = soup.select_one('div#corePriceDisplay_desktop_feature_div span.aok-offscreen').text.replace('₹','').replace('$','').strip()
+                price_info['list_price'] = soup.select_one('div#corePriceDisplay_desktop_feature_div span.aok-offscreen').text.strip()
 
         elif soup.find(id="corePrice_desktop"):
             if soup.select('span.a-price.a-text-price.a-size-base[data-a-strike="true"] span.a-offscreen'):
-                price_info['list_price'] = soup.select('span.a-price.a-text-price.a-size-base[data-a-strike="true"] span.a-offscreen')[0].text.replace('₹','').replace('$','').strip()
-                price_info['promo_price']  = soup.select_one('span.a-price.a-text-price.a-size-medium.apexPriceToPay span.a-offscreen').text.replace('₹','').replace('$','').strip()
+                price_info['list_price'] = soup.select('span.a-price.a-text-price.a-size-base[data-a-strike="true"] span.a-offscreen')[0].text.strip()
+                price_info['promo_price']  = soup.select_one('span.a-price.a-text-price.a-size-medium.apexPriceToPay span.a-offscreen').text.strip()
                 price_info['discount_percentage']  = soup.select_one('td.a-span12.a-color-price.a-size-base span.a-color-price').text.split('(')[1].split(')')[0].strip()
             
             elif soup.select_one('span.a-price.a-text-price.a-size-medium.apexPriceToPay span.a-offscreen') and soup.select_one('span.a-price.a-text-price.a-size-medium.apexPriceToPay span.a-offscreen').text.strip():
-                price_info['list_price'] = soup.select_one('span.a-price.a-text-price.a-size-medium.apexPriceToPay span.a-offscreen').text.replace('₹','').replace('$','').strip()
+                price_info['list_price'] = soup.select_one('span.a-price.a-text-price.a-size-medium.apexPriceToPay span.a-offscreen').text.strip()
             elif soup.select_one('div#corePrice_desktop span.aok-offscreen'):
-                price_info['list_price'] = soup.select_one('div#corePrice_desktop span.aok-offscreen').text.replace('₹','').replace('$','').strip()
+                price_info['list_price'] = soup.select_one('div#corePrice_desktop span.aok-offscreen').text.strip()
         elif soup.find(id="gc-live-preview-amount"):
-            price_info['list_price'] = soup.select_one('#gc-live-preview-amount').text.replace('₹','').replace('$','').strip()
+            price_info['list_price'] = soup.select_one('#gc-live-preview-amount').text.strip()
     except:
         ...
 
@@ -431,6 +435,11 @@ def amazon_parser(url,domain,page_html,asin=None):
             else:
                 details['author']  =authors[0]
     
+    # bought_history
+    maybe_bought_soup = soup.select_one('#social-proofing-faceout-title-tk_bought')
+    if maybe_bought_soup:
+        details['bought_history'] = clean_str(maybe_bought_soup.text)
+
     maybe_format = soup.select_one('#tmmSwatches .selected span.slot-title')
     if maybe_format:
         details['format'] = maybe_format.text.strip()
@@ -472,7 +481,7 @@ def amazon_parser(url,domain,page_html,asin=None):
         video_text = search_text_between(page_html,"var obj = A.$.parseJSON('","');")
         if video_text:
             video_json = json.loads(video_text)
-            details['videos'] = [
+            videos = [
                 {'duration_seconds':video['durationSeconds'],
                 'width':video['videoWidth'],
                 'height':video['videoHeight'],
@@ -485,8 +494,10 @@ def amazon_parser(url,domain,page_html,asin=None):
                 }
             for video in video_json['videos']
             ]
-            details['video_count'] = len(details['videos'])
-            details['videos_flat'] = ' | '.join([video['url'] for video in video_json['videos']])
+            if videos:
+                details['videos'] = videos
+                details['video_count'] = len(details['videos'])
+                details['videos_flat'] = ' | '.join([video['url'] for video in video_json['videos']])
     except Exception as e:
         ...
 
@@ -511,6 +522,7 @@ def amazon_parser(url,domain,page_html,asin=None):
         details['rating'] = soup.find('span',attrs={"data-hook":"rating-out-of-text"}).text.split('out')[0].strip()
         
     # total ratings
+    # rating_breakdown
     try:
         details['total_ratings'] = int(soup.find('span',id="acrCustomerReviewText").text.split('rating')[0].strip().replace(',',''))
         if soup.select('table#histogramTable tr'):
@@ -549,8 +561,6 @@ def amazon_parser(url,domain,page_html,asin=None):
         
     except:
         ...
-    
-    # rating_breakdown
     
     
     # MarketPlace ID
@@ -770,7 +780,10 @@ def amazon_parser(url,domain,page_html,asin=None):
             details['aplus_content'] = brand_story
 
     details['price_info'] = get_price_info(soup)
-    
+    # currenctCOde
+    current_code = search_text_between(page_html,'currencyCode&quot;:&quot;','&quot;')
+    if current_code:
+        details['currency_code'] = current_code
     # Stock Count
     if soup.find(id="availability"):
         in_stock_text = soup.find(id="availability").text.strip()    

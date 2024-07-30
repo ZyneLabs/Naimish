@@ -1,11 +1,13 @@
 from fastapi import FastAPI, Query, Response
 from AmazonScraper import amazon_scraper
-from AmazonParser_v2 import *
+from AmazonParser_v2 import amazon_parser,get_domain_name
 from pydantic import BaseModel
 from pymongo.mongo_client import MongoClient
 from datetime import datetime
 mongo = MongoClient()
 collection = mongo["Amazon"]["urls"]
+
+whitelist = ['amazon.com', 'amazon.ca', 'amazon.co.uk']
 
 class ScrapeModel(BaseModel):
     url: str
@@ -25,8 +27,9 @@ async def amazon(body: ScrapeModel, response: Response):
     if token != "Testing Naimish Amazon... :)":
         response.status_code = 401
         return None
+    domain = get_domain_name(url)
     collection.insert_one({"url": url, "timestamp": datetime.now()})
-    if 'amazon.com' in url or 'amazon.ca' in url:
+    if domain in whitelist:
         if '?th' in url:
             url +='&psc=1'
         elif '?' in url:
@@ -35,8 +38,7 @@ async def amazon(body: ScrapeModel, response: Response):
             url += '?th=1&psc=1'
          
         asin = url.split('/dp/')[1].split('/')[0].split('?')[0]
-        domain = get_domain_name(url)
-        return amazon_parser(url,domain,amazon_scraper(url,asin),asin)
+        return amazon_parser(url,domain,amazon_scraper(url,asin,domain),asin)
     else:
         return {"message": f"Invalid url {url}"}
     
