@@ -21,6 +21,6 @@ def walmart_scraper(product_url,max_try=3):
             max_try -= 1
 
         except Exception as e:
-            req = MokeRequest(400,{"message":"This request want charge you"})
+            req = MokeRequest(400,{"message":"This request wants to charge you"})
 
     return req

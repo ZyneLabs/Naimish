@@ -46,9 +46,7 @@ async def walmart(body: ScrapeModel, response: Response):
         raise HTTPException(status_code=400, detail=f"Invalid URL: {url}. Only 'walmart.com' and 'walmart.ca' URLs are accepted.")
     
     page_response  = walmart_scraper(url)
-    with open('sample_001.html','w',encoding='utf-8') as f:
-        f.write(page_response.text)
-    print(page_response)
+    
     collection.insert_one({"url": url, "timestamp": datetime.now()})
 
     if page_response.status_code == 200:
