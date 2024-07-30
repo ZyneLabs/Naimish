@@ -1,17 +1,26 @@
 from common import send_req_syphoon
+import requests
+import json
 
+class MokeRequest:
 
-def walmart_scraper(product_url,pid):
-    try:
+    def __init__(self,status_code,text):
+        self.status_code = status_code
+        self.text = json.dumps(text)
+
+    def json(self):
+        return json.loads(self.text)
+            
+def walmart_scraper(product_url,max_try=3):
+    while max_try:
         try:
-            with open(f'{pid}.html', 'r', encoding='utf-8') as f:
-                html = f.read()
-        except:
             req = send_req_syphoon(0, 'get', product_url)
             req.raise_for_status()
-            with open(f'{pid}.html', 'w', encoding='utf-8') as f:
-                f.write(req.text)
-            html = req.text
-        return html
-    except Exception as e:
-        print(e)
+            return req
+        except requests.exceptions.RequestException:
+            max_try -= 1
+
+        except Exception as e:
+            req = MokeRequest(400,{"message":"This request want charge you"})
+
+    return req
