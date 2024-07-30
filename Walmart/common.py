@@ -9,7 +9,7 @@ from random import randint
 import traceback
 from datetime import datetime
 
-API_KEYS = getenv('API_KEYS').split(',')
+API_KEYS = ['YV749KjNlvgdbjsVWkW3','YV749KjNlvgdbjsVWkW4']
 
 def send_req_syphoon(
     scraper_class, method, url, params=None, headers=None, payload=None, cookies=None, total_retries=5
@@ -47,7 +47,6 @@ def send_req_syphoon(
             )
         except Exception as ex:
             retry_count += 1
-
 
 def get_digit_groups(input_str):
     if input_str is None:
