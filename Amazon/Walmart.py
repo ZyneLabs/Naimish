@@ -1,5 +1,33 @@
 from bs4 import BeautifulSoup
 import json
+from common import send_req_syphoon,findall_text_between,clean_str
+import requests
+import json
+import jsbeautifier
+
+class MokeRequest:
+
+    def __init__(self,status_code,text):
+        self.status_code = status_code
+        self.text = json.dumps(text)
+
+    def json(self):
+        return json.loads(self.text)
+            
+def walmart_scraper(product_url,max_try=3):
+    while max_try:
+        try:
+            req = send_req_syphoon(0, 'get', product_url)
+            req.raise_for_status()
+            return req
+        except requests.exceptions.RequestException:
+            max_try -= 1
+
+        except Exception as e:
+            req = MokeRequest(400,{"message":"This request wants to charge you"})
+
+    return req
+
 
 def get_variant_details(product_json,details):
     
@@ -289,4 +317,114 @@ def walmert_parser(product_url,html):
         product['reviews_results'] = reviews
 
     details['product_info'] = product
+    # 
+    #  Having changes into headers and cookies for graphql request
+    #  without cookies it will not work
+    # 
+    # seller_offers
+    # maybe_webpack_link = get_webpack_link(html)
+    # if maybe_webpack_link:
+    #     maybe_marketplace_link = get_marketplace_link(maybe_webpack_link)
+    #     if maybe_marketplace_link:
+    #         maybe_graphql_hash = get_graphql_hash(maybe_marketplace_link)
+    #         if maybe_graphql_hash:
+    #             details['seller_offers'] = get_seller_offer(product['us_item_id'],maybe_graphql_hash)
+
     return details
+
+
+def get_webpack_link(html):
+  
+    soup = BeautifulSoup(html, 'html.parser')
+
+    for script in soup.select('script[src]'):
+        if 'webpack-' in script.get('src'):
+            return script.get('src')
+    
+def get_marketplace_link(webpack_link):
+
+    js_file = webpack_link.split('/')[-1]
+    prefix_url = webpack_link.replace(js_file,'')
+    try:
+        with open(js_file, 'rb') as f:
+            raw_js_text = f.read().decode('utf-8')
+    except:
+        js_response = walmart_scraper(webpack_link)
+        with open(js_file, 'wb') as f:
+            f.write(js_response.content)
+        raw_js_text = js_response.content.decode('utf-8')
+    
+    raw_js = jsbeautifier.beautify(raw_js_text)
+    maybe_token = findall_text_between(raw_js,'node_modules_.pnpm_@graphql-tools+schema@6.2.4_graphql@15.5_node_modules_@graphql-tools_schema_index.esm",',': "marketplace_all-sellers-panel"')
+    if maybe_token:
+        token = clean_str(maybe_token[0])
+        maybe_hash = findall_text_between(raw_js,f'{token}:',",")
+        if maybe_hash:
+            hash = clean_str(maybe_hash[1]).replace('"','')
+            return f'{prefix_url}/marketplace_all-sellers-panel.{hash}.js'
+        
+
+def get_graphql_hash(marketplace_link):
+    marketplace_file  = marketplace_link.split('/')[-1]
+    try:
+        with open(marketplace_file, 'rb') as f:
+            raw_js_text = f.read().decode('utf-8')
+    except:
+        marketplace_response = walmart_scraper(marketplace_link)
+        with open(marketplace_file, 'wb') as f:
+            f.write(marketplace_response.content)
+
+        raw_js_text = jsbeautifier.beautify(marketplace_response.content.decode('utf-8'))
+        
+    raw_js = jsbeautifier.beautify(raw_js_text)
+    with open('raw.js', 'w') as f:
+        f.write(raw_js)
+    maybe_hashs = findall_text_between(raw_js,'hash','},')
+    if maybe_hashs:
+        return clean_str(maybe_hashs[0].replace('"','').replace(':',''))
+    
+
+def get_seller_offer(item_number,hash):
+
+    x_headers = {
+        'accept': 'application/json',
+        'accept-language': 'en-US',
+        'content-type': 'application/json',
+        'cookie': 'locGuestData=eyJpbnRlbnQiOiJTSElQUElORyIsImlzRXhwbGljaXQiOmZhbHNlLCJzdG9yZUludGVudCI6IlBJQ0tVUCIsIm1lcmdlRmxhZyI6ZmFsc2UsImlzRGVmYXVsdGVkIjp0cnVlLCJwaWNrdXAiOnsibm9kZUlkIjoiMzA4MSIsInRpbWVzdGFtcCI6MTcxOTgxMDYyMTM5Nywic2VsZWN0aW9uVHlwZSI6IkRFRkFVTFRFRCJ9LCJzaGlwcGluZ0FkZHJlc3MiOnsidGltZXN0YW1wIjoxNzE5ODEwNjIxMzk3LCJ0eXBlIjoicGFydGlhbC1sb2NhdGlvbiIsImdpZnRBZGRyZXNzIjpmYWxzZSwicG9zdGFsQ29kZSI6Ijk1ODI5IiwiZGVsaXZlcnlTdG9yZUxpc3QiOlt7Im5vZGVJZCI6IjMwODEiLCJ0eXBlIjoiREVMSVZFUlkiLCJ0aW1lc3RhbXAiOjE3MjIyNDYyNTkxNTQsImRlbGl2ZXJ5VGllciI6bnVsbCwic2VsZWN0aW9uVHlwZSI6IkxTX1NFTEVDVEVEIiwic2VsZWN0aW9uU291cmNlIjpudWxsfV0sImNpdHkiOiJTYWNyYW1lbnRvIiwic3RhdGUiOiJDQSJ9LCJwb3N0YWxDb2RlIjp7InRpbWVzdGFtcCI6MTcxOTgxMDYyMTM5NywiYmFzZSI6Ijk1ODI5In0sIm1wIjpbXSwidmFsaWRhdGVLZXkiOiJwcm9kOnYyOmIyODZiNzg4LTc2MTctNDA2Zi05ZmVhLTM1ZGY4ZTQ2OWI3ZiJ9;',
+        'downlink': '2.25',
+        'dpr': '1',
+        'priority': 'u=1, i',
+        'referer': 'https://www.walmart.com/ip/ATD-Tools-Utility-Cut-Off-Tool-with-Guard-2139/46639362',
+        'sec-ch-ua': '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Linux"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-origin',
+        'tenant-id': 'elh9ie',
+        'traceparent': '00-4b8ea95cfefe93cc5ad093a56ad473fa-95936d7561c309cc-00',
+        'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'wm_mp': 'true',
+        'wm_page_url': 'https://www.walmart.com/ip/ATD-Tools-Utility-Cut-Off-Tool-with-Guard-2139/46639362',
+        'wm_qos.correlation_id': 'yXktS6Zz4zouGa3Us_4YMDkSWm7vk8REEDJk',
+        'x-apollo-operation-name': 'GetAllSellerOffers',
+        'x-enable-server-timing': '1',
+        'x-latency-trace': '1',
+        'x-o-bu': 'WALMART-US',
+        'x-o-ccm': 'server',
+        'x-o-correlation-id': 'yXktS6Zz4zouGa3Us_4YMDkSWm7vk8REEDJk',
+        'x-o-gql-query': 'query GetAllSellerOffers',
+        'x-o-mart': 'B2C',
+        'x-o-platform': 'rweb',
+        'x-o-platform-version': 'us-web-1.152.0-e89110474d001fa520916891177bf289432c7c41-072923',
+        'x-o-segment': 'oaoh',
+    }
+    params = {
+        'variables': '{"itemId":"'+item_number+'","isSubscriptionEligible":true}',
+    }
+    payload={
+        'headers':x_headers
+    }
+
+    req = send_req_syphoon(2,'get',f'https://www.walmart.com/orchestra/home/graphql/GetAllSellerOffers/{hash}',params=params,payload=payload)
+    return req.json()

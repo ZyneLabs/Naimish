@@ -4,3 +4,4 @@ beautifulsoup4
 pymongo
 redis
 rq
+jsbeautifier

@@ -88,3 +88,12 @@ def search_text_between(text, start, end):
         return match.group(1)
     else:
         return None
+    
+
+def findall_text_between(text, start, end):
+    pattern = re.compile(f'{re.escape(start)}(.*?){re.escape(end)}', re.DOTALL)
+    match = pattern.findall(text)
+    if match:
+        return match
+    else:
+        return None

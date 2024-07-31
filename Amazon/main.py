@@ -1,8 +1,6 @@
 from fastapi import FastAPI, Query, Response, HTTPException
-from AmazonScraper import amazon_scraper
-from AmazonParser_v2 import amazon_parser,get_domain_name
-from WalmartScraper import walmart_scraper
-from Walmart_Parser_v2 import walmert_parser
+from Amazon import amazon_parser,get_domain_name,amazon_scraper
+from Walmart import walmert_parser,walmart_scraper
 from pydantic import BaseModel
 from pymongo.mongo_client import MongoClient
 from datetime import datetime
@@ -78,9 +76,14 @@ async def amazon(body: ScrapeModel, response: Response):
             url += '?th=1&psc=1'
          
         asin = url.split('/dp/')[1].split('/')[0].split('?')[0]
-        return amazon_parser(url,domain,amazon_scraper(url,asin,domain),asin)
+
+        page_html  = amazon_scraper(url,asin,domain)
+        if page_html.get('message',''):
+            raise HTTPException(status_code=401, detail=page_html['message'])
+        
+        return amazon_parser(url,domain,page_html,asin)
     else:
-        return {"message": f"Invalid url {url}"}
+        return HTTPException(status_code=400, detail=f"Invalid URL: {url}. Only 'amazon.com' and 'amazon.ca' URLs are accepted.")
     
 
 if __name__ == "__main__":
