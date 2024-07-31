@@ -4,9 +4,9 @@ from Walmart import walmert_parser,walmart_scraper
 from pydantic import BaseModel
 from pymongo.mongo_client import MongoClient
 from datetime import datetime
-mongo = MongoClient()
-amazon_collection = mongo["Amazon"]["urls"]
-walmart_collection = mongo["Walmart"]["urls"]
+# mongo = MongoClient()
+# amazon_collection = mongo["Amazon"]["urls"]
+# walmart_collection = mongo["Walmart"]["urls"]
 
 amazon_whitelist = ['amazon.com', 'amazon.ca', 'amazon.co.uk']
 walmart_whitelist = ['walmart.com', 'walmart.ca']
@@ -49,7 +49,7 @@ async def walmart(body: ScrapeModel, response: Response):
     
     page_response  = walmart_scraper(url)
     
-    walmart_collection.insert_one({"url": url, "timestamp": datetime.now(), "token": token})
+    # walmart_collection.insert_one({"url": url, "timestamp": datetime.now(), "token": token})
 
     if page_response.status_code == 200:
         return walmert_parser(url,page_response.text)
@@ -66,7 +66,7 @@ async def amazon(body: ScrapeModel, response: Response):
         response.status_code = 401
         return None
     domain = get_domain_name(url)
-    amazon_collection.insert_one({"url": url, "timestamp": datetime.now(), "token": token})
+    # amazon_collection.insert_one({"url": url, "timestamp": datetime.now(), "token": token})
     if domain in amazon_whitelist:
         if '?th' in url:
             url +='&psc=1'
@@ -78,9 +78,12 @@ async def amazon(body: ScrapeModel, response: Response):
         asin = url.split('/dp/')[1].split('/')[0].split('?')[0]
 
         page_html  = amazon_scraper(url,asin,domain)
-        if page_html.get('message',''):
-            raise HTTPException(status_code=401, detail=page_html['message'])
-        
+        try:
+            if page_html.get('message',''):
+                raise HTTPException(status_code=401, detail=page_html['message'])
+        except:
+            ...
+                
         return amazon_parser(url,domain,page_html,asin)
     else:
         return HTTPException(status_code=400, detail=f"Invalid URL: {url}. Only 'amazon.com' and 'amazon.ca' URLs are accepted.")
