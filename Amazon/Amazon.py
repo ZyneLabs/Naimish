@@ -1006,7 +1006,7 @@ def amazon_parser(url,domain,page_html,asin=None):
     if soup.find(id="productDescription"):
         description =clean_str(soup.find(id="productDescription").text.strip())
     
-    elif soup.find('div',id="productDescription_feature_div"):
+    elif soup.find('div',id="productDescription_feature_div") and soup.find('div',id="productDescription_feature_div").text.strip():
         description = clean_str(soup.find('div',id="productDescription_feature_div").text.replace('Description',''))
     
     elif soup.find(id='mas-product-description'):
@@ -1014,10 +1014,9 @@ def amazon_parser(url,domain,page_html,asin=None):
    
     else:
         try:
-            description = clean_str('|'.join([i.text.strip() for i in soup.find('h2',string=re.compile('Product Description',re.IGNORECASE)).next_siblings if i.text.strip()]).replace('\n','').strip())
+            description = clean_str('|'.join([i.text.strip() for i in soup.find('h2',string=re.compile('Product Description',re.IGNORECASE)).next_siblings if i.text.strip()]))
         except:
             pass
-
     if description:
         details['description'] = description
 
