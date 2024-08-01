@@ -33,18 +33,24 @@ cookies = {
     'amazon.ca':'i18n-prefs=CAD;  lc-main=en_CA'
 }
 
+country_code = {
+    'amazon.com':'us',
+    'amazon.co.uk':'uk',
+    'amazon.ca':'ca'
+}
 
 def amazon_scraper(url,asin,domain):
     # kepping html for a day
     date = datetime.now().strftime("%Y%m%d")
     os.makedirs(date,exist_ok=True)
     headers['cookie'] = cookies[domain]
+    payload = {'country_code':country_code[domain]}
     try:
         with open(f'{date}/{asin}.html','r',encoding='utf-8') as f:
             html = f.read()
     except:
         try:
-            req = send_req_syphoon(1,'get',url,headers=headers)
+            req = send_req_syphoon(1,'get',url,headers=headers,payload=payload)
             req.raise_for_status()
             html = req.text
             with open(f'{date}/{asin}.html','w',encoding='utf-8') as f:
@@ -54,7 +60,17 @@ def amazon_scraper(url,asin,domain):
 
     return html
 
-def get_top_reviews(soup,domain):
+def normalize_dict(d):
+    items = {}
+    for k, v in d.items():
+        if isinstance(v, dict):
+            items.update(normalize_dict(v))
+        else:
+            items[k] = v
+    return dict(items)
+
+
+def get_top_reviews(soup):
     reviews = []
     for review_soup in soup.select('div[data-hook="review"].a-section.review.aok-relative'):
         try:
@@ -70,7 +86,7 @@ def get_top_reviews(soup,domain):
             review['body_html']  =clean_str(review_soup.find('span',attrs={'data-hook':"review-body"}).prettify())
 
             if review_soup.find('a',attrs={"data-hook":"review-title"}):
-                review['link'] ='https://'+domain+review_soup.find('a',attrs={"data-hook":"review-title"})['href']
+                review['link'] =review_soup.find('a',attrs={"data-hook":"review-title"})['href']
             
             if review_soup.find('i',attrs={'data-hook':"review-star-rating"}):
                 review['rating'] = review_soup.find('i',attrs={'data-hook':"review-star-rating"}).text.split('out')[0].strip()
@@ -95,7 +111,7 @@ def get_top_reviews(soup,domain):
                     'name':clean_str(review_soup.select_one("div[data-hook='genome-widget'] span.a-profile-name").text),
                 }
                 if review_soup.select_one("div[data-hook='genome-widget'] a.a-profile"):
-                    review['profile']['link'] = 'https://'+domain+review_soup.select_one("div[data-hook='genome-widget'] a.a-profile")['href']
+                    review['profile']['link'] = review_soup.select_one("div[data-hook='genome-widget'] a.a-profile")['href']
                     review['profile']['id'] = review_soup.select_one("div[data-hook='genome-widget'] a.a-profile")['href'].split('amzn1.account.')[1].split('/')[0]
             
             images = search_text_between(str(soup),'imagePopoverController.initImagePopover("'+review["id"]+'", "[', ']", data)')
@@ -251,10 +267,13 @@ def get_price_info(soup):
     price_info = {}
     try:
         if soup.find(id="corePriceDisplay_desktop_feature_div"):
-            if soup.select_one('#corePriceDisplay_desktop_feature_div .savingsPercentage'):
-                price_info['discount_percentage']  = soup.find(class_="a-section a-spacing-none aok-align-center aok-relative").find(class_='savingsPercentage').text.replace('-','')
-                price_info['promo_price']  = soup.find(class_="a-section a-spacing-none aok-align-center aok-relative").find('span',class_='priceToPay').text.strip()
-                price_info['list_price'] = soup.find(class_="basisPrice").find(class_='a-price a-text-price').find(class_='a-offscreen').text.strip()
+            if soup.select_one('#corePriceDisplay_desktop_feature_div .a-section.a-spacing-none.aok-align-center.aok-relative .savingsPercentage'):
+                price_info['discount_percentage']  = soup.select_one('#corePriceDisplay_desktop_feature_div .a-section.a-spacing-none.aok-align-center.aok-relative .savingsPercentage').text.replace('-','')
+                price_info['promo_price']  = soup.select_one(".a-section.a-spacing-none.aok-align-center.aok-relative span.priceToPay").text.strip()
+                price_info['list_price'] = soup.select_one(".basisPrice .a-price.a-text-price .a-offscreen").text.strip()
+
+                if price_info['promo_price'] == price_info['list_price']:
+                    price_info = {'list_price':price_info['promo_price']}
             
             elif soup.select_one('span.a-price.reinventPricePriceToPayMargin.priceToPay') and soup.select_one('span.a-price.reinventPricePriceToPayMargin.priceToPay span.a-offscreen').text.strip():
                 price_info['list_price'] = soup.select_one('span.a-price.reinventPricePriceToPayMargin.priceToPay span.a-offscreen').text.strip()
@@ -271,8 +290,13 @@ def get_price_info(soup):
                 price_info['list_price'] = soup.select_one('span.a-price.a-text-price.a-size-medium.apexPriceToPay span.a-offscreen').text.strip()
             elif soup.select_one('div#corePrice_desktop span.aok-offscreen'):
                 price_info['list_price'] = soup.select_one('div#corePrice_desktop span.aok-offscreen').text.strip()
+        elif soup.select_one('#tmmSwatches .selected span.slot-price'):
+            price_info = soup.select_one('#tmmSwatches .selected span.slot-price').text.strip()
         elif soup.find(id="gc-live-preview-amount"):
             price_info['list_price'] = soup.select_one('#gc-live-preview-amount').text.strip()
+        elif soup.find(id="actualPriceValue"):
+            price_info['list_price'] = soup.select_one('#actualPriceValue').text.strip()
+        
     except:
         ...
 
@@ -281,8 +305,9 @@ def get_price_info(soup):
 def get_specifications(soup):
 
     sepecification = {}
-    if soup.select('div#productDetails_feature_div div.a-column.a-span6'):
-        for spec in soup.select('div#productDetails_feature_div div.a-column.a-span6'):
+    maybe_specification_table = soup.select('div#productDetails_feature_div div.a-column.a-span6') or soup.select('div#prodDetails div.a-column.a-span6')
+    if maybe_specification_table:
+        for spec in maybe_specification_table:
             sub_spec = {}
             if not spec.select('table tr'):continue
             if spec.select('table#productDetails_feedback_sections'):
@@ -290,19 +315,47 @@ def get_specifications(soup):
 
             if spec.find('h1') and 'feedback' not in spec.find('h1').text.lower() and 'warranty' not in spec.find('h1').text.lower():
                 header = spec.find('h1').text
-                for item in spec.find_all('tr'):
-                    sub_spec[clean_str(item.find('th').text)] = clean_str(item.find('td').text)
+
+                if spec.select('div.a-row.a-expander-container.a-expander-inline-container h5'):
+                    maybe_sub_spec = spec.select('div.a-row.a-expander-container.a-expander-inline-container')
+                    for item in maybe_sub_spec:
+                        sub_sub_spec = {}
+                        sub_header = clean_str(item.find('h5').text)
+                        for sub_item in item.find_all('tr'):
+                            try:
+                                sub_sub_spec[clean_str(sub_item.find('th').text)] = clean_str(sub_item.find('td').text)
+                            except:
+                                ...
+                        sub_spec[sub_header] = sub_sub_spec
+                else:
+                    for item in spec.find_all('tr'):
+                        try:
+                            sub_spec[clean_str(item.find('th').text)] = clean_str(item.find('td').text)
+                        except:
+                            ...
                 sepecification[header] = sub_spec
 
             else:
                 for item in spec.find_all('tr'):
-                    sepecification[clean_str(item.find('th').text)] = clean_str(item.find('td').text)
+                    try:
+                        sepecification[clean_str(item.find('th').text)] = clean_str(item.find('td').text)
+                    except:
+                        ...
+
+    elif soup.select('div#prodDetails div.a-column.a-span6 tr'):
+        for item in soup.select('div#prodDetails div.a-column.a-span6 tr'):
+            try:
+                sepecification[clean_str(item.find('th').text)] = clean_str(item.find('td').text)
+            except:
+                ...
+
     elif soup.select('#technicalSpecifications_feature_div tr'):
         for item in soup.select('#technicalSpecifications_feature_div tr'):
             try:
                 sepecification[clean_str(item.find('th').text)] = clean_str(item.find('td').text)
             except:
                 ...
+
     elif soup.select('#rich_product_information li'):
         for item in soup.select('#rich_product_information li'):
             try:
@@ -311,12 +364,18 @@ def get_specifications(soup):
                 ...
 
     elif soup.find('table',id='productDetails_techSpec_section_1'):
-        for item in soup.find('table',id='productDetails_techSpec_section_1').find_all('tr'):
-            sepecification[clean_str(item.find('th').text)] = clean_str(item.find('td').text)
-        
+        for table in soup.find_all('table',id=re.compile('productDetails_techSpec_section_')):
+            for item in table.find_all('tr'):
+                try:
+                    sepecification[clean_str(item.find('th').text)] = clean_str(item.find('td').text)
+                except:...
+
     elif soup.select('div.a-column.a-span6.block-content.block-type-table tr'):
         for item in soup.select('div.a-column.a-span6.block-content.block-type-table tr'):
-            sepecification[clean_str(item.find('td').text)] = clean_str(item.find_all('td')[1].text)
+            try:
+                sepecification[clean_str(item.find('td').text)] = clean_str(item.find_all('td')[1].text)
+            except:
+                ...
 
     return sepecification
 
@@ -357,7 +416,15 @@ def get_product_details(soup):
             product_details = product_details | dict(zip(head,val))
         except:
             ...
-        
+    elif soup.find('h2',string=re.compile('Product details',re.IGNORECASE)):
+        try:
+            for row in soup.find('h2',string=re.compile('Product details',re.IGNORECASE)).find_next_siblings('div'):
+                if row.get('id',''):break
+                spans = row.find_all('span')
+                product_details[clean_str(spans[0].text)] = clean_str(spans[1].text)
+        except:
+            ...
+
     return product_details
 
 def get_protection_plan(soup):
@@ -403,7 +470,7 @@ def get_bundles(soup):
     return bundles
 
 
-def  get_bundle_contents(soup):
+def get_bundle_contents(soup):
     bundle_contents = []
     for row in soup.select('div.bundle-components div.a-row'):
         try:
@@ -424,6 +491,135 @@ def  get_bundle_contents(soup):
 
     return bundle_contents
 
+def get_aplus_content(maybe_brand_story_soup):    
+    brand_story = {}
+    if maybe_brand_story_soup.select('.apm-brand-story-logo-image img'):
+        brand_story['brand_logo'] =  maybe_brand_story_soup.select_one('.apm-brand-story-logo-image img')['data-src']
+    brand_story['hero_image'] =  maybe_brand_story_soup.select_one('.apm-brand-story-background-image img')['data-src']
+    if maybe_brand_story_soup.select_one('.apm-brand-story-slogan-text'):
+        brand_story['description'] = clean_str(' | '.join([brand_text.text for brand_text in maybe_brand_story_soup.select_one('.apm-brand-story-slogan-text').children if brand_text.text.strip()]))
+
+    if maybe_brand_story_soup.select('img'):
+        images = []
+        for img in maybe_brand_story_soup.select('img'):
+            try:
+                images.append(img['data-src'])
+            except:
+                ...
+        brand_story['images'] = images
+    
+    if maybe_brand_story_soup.select('.apm-brand-story-faq-block'):
+        faqs  = []
+        for faq in maybe_brand_story_soup.select('.apm-brand-story-faq-block'):
+            faqs.append({
+                'title':clean_str(faq.select_one('h4').text),
+                'body':clean_str(' | '.join([faq_text.text for faq_text in faq.select('p')]))
+            })
+        brand_story['faqs'] = faqs
+
+    if maybe_brand_story_soup.select('.apm-brand-story-image-cell a'):
+        products = []
+        for item in maybe_brand_story_soup.select('.apm-brand-story-image-cell a'):
+            try:
+                product = {}
+
+                product['asin'] = unquote(item['href']).split('/dp/')[1].split('/')[0]
+                product['title'] = item.select_one('img')['alt']
+                product['link'] = item['href']
+                product['image'] = item.select_one('img')['data-src']
+                products.append(product)
+            except:
+                ...
+        brand_story['products'] = products
+    return brand_story
+
+def get_bestseller_info(soup):
+    bestseller_info = []
+    if soup.find('span',string=re.compile('Best Sellers Rank')):
+        bestsellers_rank_element = soup.find('span',string=re.compile('Best Sellers Rank')).find_parent('li')
+        for seller in bestsellers_rank_element.find_all('span',class_="a-list-item"):
+            seller_rank = {}
+            
+            a = seller.find('a')
+            if a:
+                if ' in ' in a.text:
+                    seller_rank['category'] = a.text.split(' in ')[1]
+                else:
+                    seller_rank['category'] = a.text
+                seller_rank['rank']= seller.text.split('in')[0].replace('#','').replace('Best Sellers Rank:','').strip()
+                seller_rank['link'] = a['href']
+                bestseller_info.append(seller_rank)
+
+    elif soup.find('th',string=re.compile('Best Sellers Rank')):
+        bestsellers_rank_element = soup.find('th',string=re.compile('Best Sellers Rank')).find_next_sibling('td')
+        for seller in bestsellers_rank_element.select('span span'):
+            seller_rank = {}
+            
+            a = seller.find('a')
+            if a:
+                if ' in ' in a.text:
+                    seller_rank['category'] = a.text.split(' in ')[1]
+                else:
+                    seller_rank['category'] = a.text
+                seller_rank['rank']= seller.text.split('in')[0].replace('#','').replace('Best Sellers Rank:','').strip()
+                seller_rank['link'] = a['href']
+                bestseller_info.append(seller_rank)
+
+    return bestseller_info
+
+def get_music_tracks(soup):
+
+    tracks = []
+    tracks_soup = soup.select('#musicTracks_feature_div #music-tracks div.a-row')
+    if tracks_soup:
+        for disk in tracks_soup:
+            disk_info = {}
+            songs = [song.find_all('td')[1].text for song in disk.select('tr')]
+            maybe_disk_header = disk.find_previous_sibling('h4')
+            if maybe_disk_header:
+                disk_info = {
+                    'title' : clean_str(maybe_disk_header.text),
+                    'songs' : songs
+                }
+                tracks.append(disk_info)
+            else:
+                tracks.extend(songs)
+    return tracks
+
+def get_used_product_offer(soup):
+    maybe_used_product_soup =  soup.select_one('#usedAccordionRow')
+    if maybe_used_product_soup:
+        product = {}
+        product['asin'] = maybe_used_product_soup.select_one('div[data-csa-c-asin]')['data-csa-c-asin']
+        product['raw_text'] = clean_str(maybe_used_product_soup.select_one('#usedAccordionCaption_feature_div span').text)
+        maybe_price = maybe_used_product_soup.select_one('.reinventPriceAccordionT2 .a-offscreen')
+        if  maybe_price and maybe_price.text.strip():
+            product['price'] = maybe_used_product_soup.select_one('.reinventPriceAccordionT2 .a-offscreen').text
+        elif maybe_used_product_soup.select_one('.reinventPriceAccordionT2 [aria-hidden]'):
+            product['price'] = clean_str(maybe_used_product_soup.select_one('.reinventPriceAccordionT2 [aria-hidden]').text)
+        
+        maybe_delivery_soup = maybe_used_product_soup.select_one('#usedAccordionRow #mir-layout-DELIVERY_BLOCK-slot-PRIMARY_DELIVERY_MESSAGE_MEDIUM span')
+        if maybe_delivery_soup:
+            product['delivery_fee'] = maybe_delivery_soup['data-csa-c-delivery-price']
+            product['delivery_date'] = maybe_delivery_soup['data-csa-c-delivery-time']
+        
+        for row in soup.select('#shipFromSoldByAbbreviated_feature_div div.a-row'):
+            spans = row.find_all('span')
+            product[clean_str(spans[0].text).replace(' ','_').lower()] = spans[1].text
+        return product
+    
+def get_legal_features(soup):
+    maybe_leagal_feature_soup =  soup.select_one('#legalEUBtf_feature_div ')
+    legal_features = {}
+    if maybe_leagal_feature_soup and maybe_leagal_feature_soup.select_one('h2'):
+        legal_features['title'] = clean_str(maybe_leagal_feature_soup.select_one('h2').text)
+        maybe_sub_title = maybe_leagal_feature_soup.select_one('div span')
+        if maybe_sub_title:
+            legal_features['sub_title'] = clean_str(maybe_sub_title.text)
+        raw_text = maybe_leagal_feature_soup.select('ul li')
+        if raw_text:
+            legal_features['raw_text'] = [clean_str(li.text) for li in raw_text]
+        return legal_features
 
 def amazon_parser(url,domain,page_html,asin=None):
 
@@ -437,6 +633,12 @@ def amazon_parser(url,domain,page_html,asin=None):
         details['parent_asin'] = parent_asin
 
     soup = BeautifulSoup(page_html, 'lxml')
+
+    # making all anchors absolute
+    for a in soup.select('a[href]'):
+        if not a['href'].startswith('http'):
+            a['href'] = 'https://'+domain+a['href']
+
     
     maybe_search_alias = soup.select_one('form#nav-search-bar-form option[selected]')
     if maybe_search_alias:
@@ -449,6 +651,8 @@ def amazon_parser(url,domain,page_html,asin=None):
     
     if soup.find(id='title'):
         details['product_name'] =clean_str(soup.find(id='title').text)
+    elif soup.find(id="btAsinTitle"):
+        details['product_name'] =clean_str(soup.find(id="btAsinTitle").text)
     else:
         page_html = search_text_between(page_html,'<html class="a-no-js" data-19ax5a9jf="dingo">','</html>')
         if page_html:
@@ -475,19 +679,22 @@ def amazon_parser(url,domain,page_html,asin=None):
                 'text' : soup.find(id="bylineInfo").text,
                 'url' : soup.find(id="bylineInfo")['href']
             }
-        maybe_author =  soup.select('#bylineInfo span.author a')
-        if maybe_author:
+        elif soup.select('#bylineInfo span.author a'):
+            maybe_author =  soup.select('#bylineInfo span.author a')
             authors = []
             for author in maybe_author:
                 authors.append({
                 'name':clean_str(author.text),
-                'link':author['href']
+                'link':author['href'],
+                'contribution':clean_str(author.find_next_sibling('span').text.replace('(','').replace('),','').replace(')','')) if author.find_next_sibling('span') else 'Author'
                 })
             if len(authors)>1:
-                details['authors'] = authors
+                details['contributors'] = authors
             else:
-                details['author']  =authors[0]
-    
+                details['contributor']  =authors[0]
+        elif soup.find(id="brand"):
+            details['brand'] = soup.find(id="brand").text
+
     # bought_history
     maybe_bought_soup = soup.select_one('#social-proofing-faceout-title-tk_bought')
     if maybe_bought_soup:
@@ -560,16 +767,22 @@ def amazon_parser(url,domain,page_html,asin=None):
     
     # coupon
     try:
-        if soup.select('span.promoPriceBlockMessage span.a-color-success label'):
+        maybe_coupon = soup.select_one('span.promoPriceBlockMessage span.a-color-success label') or soup.select_one('span.promoPriceBlockMessage label[id]')
+        if maybe_coupon:
             details['has_coupon'] = True
-            details['coupon_text'] = soup.select('span.promoPriceBlockMessage span.a-color-success label')[0].text.split('Shop items')[0].strip()
+            details['coupon_text'] = maybe_coupon.text.split('Shop items')[0].strip()
     except:
-        details['has_coupon'] = False
+        ...
 
     # amazons_choice
-    if soup.select_one('div#acBadge_feature_div span.ac-for-text'):
-        details['amazons_choice'] = clean_str(soup.select_one('div#acBadge_feature_div span.ac-for-text').text)
+    maybe_amazons_choice = soup.select_one('div#acBadge_feature_div span.ac-for-text')
+    if maybe_amazons_choice:
+        details['has_amazons_choice'] = True
+        amazon_choice_text = clean_str(maybe_amazons_choice.text)
+        if amazon_choice_text:
+            details['amazons_choice_text'] = amazon_choice_text
 
+    details['climate_pledge_friendly'] = True if soup.select('#climatePledgeFriendly') else False
     # Rating
     if soup.find('span',attrs={"data-hook":"rating-out-of-text"}):
         details['rating'] = soup.find('span',attrs={"data-hook":"rating-out-of-text"}).text.split('out')[0].strip()
@@ -577,7 +790,11 @@ def amazon_parser(url,domain,page_html,asin=None):
     # total ratings
     # rating_breakdown
     try:
-        details['total_ratings'] = int(soup.find('span',id="acrCustomerReviewText").text.split('rating')[0].strip().replace(',',''))
+        rating_soup  = soup.find('span',id="acrCustomerReviewText")
+        if rating_soup:
+            details['total_ratings'] = int(rating_soup.text.split('rating')[0].strip().replace(',',''))
+        else:
+            details['total_ratings'] = int(soup.select_one('span[data-hook="total-review-count"]').text.split()[0].strip().replace(',',''))
         if soup.select('table#histogramTable tr'):
             rating_breakdown = []
             for row in soup.select('table#histogramTable tr'):
@@ -626,7 +843,7 @@ def amazon_parser(url,domain,page_html,asin=None):
     if soup.find(id='wayfinding-breadcrumbs_feature_div'):
         details['categories'] = [
             {'name':c.text.strip(),
-            'url':f'https://{domain}{c["href"]}',
+            'url':c["href"],
             'category_id':c['href'].split('node=')[1].split('&')[0]
             }
 
@@ -682,12 +899,13 @@ def amazon_parser(url,domain,page_html,asin=None):
                 collectible_info[clean_str(row.find('th').text)] = clean_str(row.find('td').text)
         except:...
         details['collectible_info'] = collectible_info
+
+    details['attributes'] = {}
     # product_details   
-    
     product_details = get_product_details(soup)
     if product_details:
         details['product_details'] = product_details
-
+        details['attributes'] = normalize_dict(product_details)
     # additional Details
 
     if soup.find(id="provenance-certifications"):
@@ -705,7 +923,12 @@ def amazon_parser(url,domain,page_html,asin=None):
     specifications = get_specifications(soup)
     if specifications:
         details['specifications'] = specifications
-
+        details['attributes'] = details['attributes'] | normalize_dict(specifications)
+    
+    # music-tracks
+    music_tracks = get_music_tracks(soup)
+    if music_tracks:
+        details['music_tracks'] = music_tracks
     # has_360_view
     if soup.select('div#spin360_feature_div script'):
         details['has_360_view'] = True
@@ -761,82 +984,83 @@ def amazon_parser(url,domain,page_html,asin=None):
 
     # additional info
     try:
-        info_text = []
-        for i in soup.find('h3',string=re.compile('Additional Information')).find_next_siblings('div',class_='a-fixed-left-grid product-facts-detail'):
-            head ,val = i.find('div',class_='a-fixed-left-grid-col a-col-left').text.strip(),i.find('div',class_='a-fixed-left-grid-col a-col-right').text.strip()
-            info_text.append(f"{head} : {val}")
-        details['additional_info'] = clean_str(' | '.join(info_text))
-    except:pass
+        info_text = {}
+        for i in soup.find('h3',string=re.compile('Additional Information',re.IGNORECASE)).find_next_siblings('div',class_='a-fixed-left-grid product-facts-detail'):
+            head ,val = clean_str(i.find('div',class_='a-fixed-left-grid-col a-col-left').text.strip()),clean_str(i.find('div',class_='a-fixed-left-grid-col a-col-right').text.strip())
+            info_text[head] = val
+        
+        details['additional_info'] = info_text
+    except:
+        ...
+    
+    # developer-info
+    if soup.find(id="mas-developer-info"):
+        details['developer_info'] = [i.text.strip() for i in soup.find(id="mas-developer-info").find_all('li')]
+
+    # product-feature
+    if soup.find(id='mas-product-feature'):
+        details['product_feature'] = [i.text.strip() for i in soup.find(id='mas-product-feature').find_all('li')]
 
     # Description
-    details['description']=''
+    description=''
     if soup.find(id="productDescription"):
-        details['description'] =clean_str(soup.find(id="productDescription").text.strip())
+        description =clean_str(soup.find(id="productDescription").text.strip())
     
     elif soup.find('div',id="productDescription_feature_div"):
-        details['description'] = clean_str(soup.find('div',id="productDescription_feature_div").text.replace('Description',''))
+        description = clean_str(soup.find('div',id="productDescription_feature_div").text.replace('Description',''))
     
+    elif soup.find(id='mas-product-description'):
+        description = clean_str(soup.find(id='mas-product-description').text.strip().replace('Product description',''))
+   
     else:
         try:
-            details['description'] = clean_str('|'.join([i.text.strip() for i in soup.find('h2',string=re.compile('Product Description')).next_siblings if i.text.strip()]).replace('\n','').strip())
+            description = clean_str('|'.join([i.text.strip() for i in soup.find('h2',string=re.compile('Product Description',re.IGNORECASE)).next_siblings if i.text.strip()]).replace('\n','').strip())
         except:
             pass
 
+    if description:
+        details['description'] = description
+
+    # Technical Details
+    maybe_tech_soup = soup.select_one('#masTechnicalDetails-btf')
+    if maybe_tech_soup:
+        tech_info = {}
+        for row in maybe_tech_soup.children:
+            if row.name =='div':
+                spans = row.find_all('span')
+                tech_info[clean_str(spans[0].text).replace(':','')] = clean_str(' '.join([i.text for i in spans[1:]])).replace('( )','').strip()
+            elif row.name == 'ul':
+                tech_info['Application Permissions']  = [clean_str(i.text) for i in row.find_all('li')]
+        details['technical_info'] = tech_info
+    
     # book_description
     if soup.select('#bookDescription_feature_div'):
         details['book_description'] = clean_str(soup.select_one('div[data-a-expander-name="book_description_expander"]').text)
 
+    # legal_features
+    legal_features = get_legal_features(soup)
+    if legal_features:
+        details['legal_features'] = legal_features
+
     # aplus_content
-    if soup.find(id="aplusBrandStory_feature_div"):
-        maybe_brand_story_soup = soup.find(class_="apm-brand-story-carousel-container")
-        if maybe_brand_story_soup:
-            brand_story = {}
-            if maybe_brand_story_soup.select('.apm-brand-story-logo-image img'):
-                brand_story['brand_logo'] =  maybe_brand_story_soup.select_one('.apm-brand-story-logo-image img')['data-src']
-            brand_story['hero_image'] =  maybe_brand_story_soup.select_one('.apm-brand-story-background-image img')['data-src']
-            if maybe_brand_story_soup.select_one('.apm-brand-story-slogan-text'):
-                brand_story['description'] = clean_str(' | '.join([brand_text.text for brand_text in maybe_brand_story_soup.select_one('.apm-brand-story-slogan-text').children if brand_text.text.strip()]))
+    maybe_aplus_soup = soup.select_one('#aplusBrandStory_feature_div .apm-brand-story-carousel-container')
+    if maybe_aplus_soup:
+        details['aplus_content'] = get_aplus_content(maybe_aplus_soup)
 
-            if maybe_brand_story_soup.select('img'):
-                images = []
-                for img in maybe_brand_story_soup.select('img'):
-                    try:
-                        images.append(img['data-src'])
-                    except:
-                        ...
-                brand_story['images'] = images
-            
-            if maybe_brand_story_soup.select('.apm-brand-story-faq-block'):
-                faqs  = []
-                for faq in maybe_brand_story_soup.select('.apm-brand-story-faq-block'):
-                    faqs.append({
-                        'title':clean_str(faq.select_one('h4').text),
-                        'body':clean_str(' | '.join([faq_text.text for faq_text in faq.select('p')]))
-                    })
-                brand_story['faqs'] = faqs
-
-            if maybe_brand_story_soup.select('.apm-brand-story-image-cell a'):
-                products = []
-                for item in maybe_brand_story_soup.select('.apm-brand-story-image-cell a'):
-                    try:
-                        product = {}
-
-                        product['asin'] = unquote(item['href']).split('/dp/')[1].split('/')[0]
-                        product['title'] = item.select_one('img')['alt']
-                        product['link'] = item['href']
-                        product['image'] = item.select_one('img')['data-src']
-                        products.append(product)
-                    except:
-                        ...
-                brand_story['products'] = products
-
-            details['aplus_content'] = brand_story
+    # storeDisclaimer
+    store_disclaimer = soup.select_one('#storeDisclaimer_feature_div div')
+    if store_disclaimer:
+        details['store_disclaimer'] = clean_str(store_disclaimer.text)
 
     details['price_info'] = get_price_info(soup)
-    # currenctCOde
+    
+    # currenctCode
     current_code = search_text_between(page_html,'currencyCode&quot;:&quot;','&quot;')
     if current_code:
         details['currency_code'] = current_code
+    elif soup.select_one('input[name="displayedPriceCurrencyCode"]'):
+        details['currency_code'] = soup.select_one('input[name="displayedPriceCurrencyCode"]').get('value')
+        
     # Stock Count
     if soup.find(id="availability"):
         in_stock_text = soup.find(id="availability").text.strip()    
@@ -850,6 +1074,7 @@ def amazon_parser(url,domain,page_html,asin=None):
         in_stock = 'No'
     details['in_stock'] = in_stock
 
+
     # subscribeAndSaveDiscountPercentage
     if soup.select_one('#snsDiscountPill  span.pillLightUp'):
         details['subscribeAndSaveDiscountPercentage'] = soup.select_one('#snsDiscountPill  span.pillLightUp').text.replace('%','').strip()
@@ -862,14 +1087,14 @@ def amazon_parser(url,domain,page_html,asin=None):
         delivery_soup =soup.find(id="mir-layout-DELIVERY_BLOCK-slot-PRIMARY_DELIVERY_MESSAGE_LARGE").find('span')
 
         details['standard_delivery'] = {
-        'name' : delivery_soup['data-csa-c-delivery-price'],
+        'price' : delivery_soup['data-csa-c-delivery-price'],
         'date' : delivery_soup['data-csa-c-delivery-time']
             }
         
     if soup.find(attrs={'data-csa-c-delivery-price':"fastest"}):
         if 'Order within' in soup.find(attrs={'data-csa-c-delivery-price':"fastest"}).text.strip():
             details['fastest_delivery'] = {
-            'name' : soup.find(attrs={'data-csa-c-delivery-price':"fastest"}).text.strip(),
+            'text' : soup.find(attrs={'data-csa-c-delivery-price':"fastest"}).text.strip(),
             'date' : soup.find(attrs={'data-csa-c-delivery-price':"fastest"})['data-csa-c-delivery-time']
                 }
             
@@ -890,11 +1115,15 @@ def amazon_parser(url,domain,page_html,asin=None):
     else:
         details['is_sold_by_amazon'] = True
 
+    # used_product
+    used_product_offer = get_used_product_offer(soup)
+    if used_product_offer:
+        details['used_product_offer'] = used_product_offer 
+
     # Best Sellers Rank
-    if soup.find('th',string=re.compile('Best Sellers Rank')):
-        details['best_seller_rank'] = clean_str(soup.find('th',string=re.compile('Best Sellers Rank')).find_next_sibling('td').text.strip())
-    elif soup.find('span',string=re.compile('Best Sellers Rank')):
-        details['best_seller_rank'] = clean_str(soup.find('span',string=re.compile('Best Sellers Rank')).parent.text.replace('Best Sellers Rank:','').strip())
+    bestseller = get_bestseller_info(soup)
+    if bestseller:
+        details['best_seller_rank'] = bestseller
 
     # is prime  
     details['is_prime'] = True if soup.select('.prime-details') else False
@@ -978,7 +1207,7 @@ def amazon_parser(url,domain,page_html,asin=None):
         details['releted_product'] = releted_product
 
     # Top reviews
-    top_reviews = get_top_reviews(soup,domain)
+    top_reviews = get_top_reviews(soup)
     if top_reviews:
         details['top_reviews'] = top_reviews
 
