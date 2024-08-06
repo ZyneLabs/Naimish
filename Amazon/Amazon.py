@@ -39,21 +39,24 @@ country_code = {
     'amazon.ca':'ca'
 }
 
-def amazon_scraper(url,asin,domain):
+
+POSSIBLE_DATE_FORMAT = ['%B %d, %Y','%d %B %Y']
+
+def amazon_scraper(url,filename,domain):
     # kepping html for a day
     date = datetime.now().strftime("%Y%m%d")
     os.makedirs(date,exist_ok=True)
     headers['cookie'] = cookies[domain]
     payload = {'country_code':country_code[domain]}
     try:
-        with open(f'{date}/{asin}.html','r',encoding='utf-8') as f:
+        with open(f'{date}/{filename}.html','r',encoding='utf-8') as f:
             html = f.read()
     except:
         try:
             req = send_req_syphoon(1,'get',url,headers=headers,payload=payload)
             req.raise_for_status()
             html = req.text
-            with open(f'{date}/{asin}.html','w',encoding='utf-8') as f:
+            with open(f'{date}/{filename}.html','w',encoding='utf-8') as f:
                 f.write(html)
         except Exception as ex:
             return {'message':f'Error in sending request {url}'}
@@ -69,8 +72,11 @@ def normalize_dict(d):
             items[k] = v
     return dict(items)
 
+def get_asin(url):
+    return unquote(url).split('/dp/')[1].split('/')[0].split('?')[0]
 
-def get_top_reviews(soup):
+
+def get_reviews_info(soup):
     reviews = []
     for review_soup in soup.select('div[data-hook="review"].a-section.review.aok-relative'):
         try:
@@ -82,8 +88,13 @@ def get_top_reviews(soup):
             else:
                 review['title'] = review_soup.find('span',attrs={"data-hook":"review-title"}).text.strip()
             
-            review['body'] = clean_str(review_soup.find('div',attrs={"data-hook":"review-collapsed"}).text)
-            review['body_html']  =clean_str(review_soup.find('span',attrs={'data-hook':"review-body"}).prettify())
+            maybe_body_soup = review_soup.find('span',attrs={'data-hook':"review-body"})
+            if maybe_body_soup:
+                if maybe_body_soup.find('div',attrs={"data-hook":"review-collapsed"}):
+                    review['body'] = clean_str(maybe_body_soup.find('div',attrs={"data-hook":"review-collapsed"}).text)
+                else:
+                    review['body'] = clean_str(maybe_body_soup.text)
+                review['body_html']  =clean_str(maybe_body_soup.prettify())
 
             if review_soup.find('a',attrs={"data-hook":"review-title"}):
                 review['link'] =review_soup.find('a',attrs={"data-hook":"review-title"})['href']
@@ -96,15 +107,18 @@ def get_top_reviews(soup):
             if review_soup.find('span',attrs={'data-hook':"helpful-vote-statement"}):
                 review['helpful_votes'] = review_soup.find('span',attrs={'data-hook':"helpful-vote-statement"}).text.split()[0]
             
-            if review_soup.find('span',attrs={'data-hook':"review-date"}):
+            review_date_soup = review_soup.find('span',attrs={'data-hook':"review-date"})
+            if review_date_soup:
                 review['date'] ={
-                    "raw" : clean_str(review_soup.find('span',attrs={'data-hook':"review-date"}).text),
+                    "raw" : clean_str(review_date_soup.text),
                 }
-                try:
-                    review["date"] = datetime.strptime(review_soup.find('span',attrs={'data-hook':"review-date"}).text.split('on')[1].strip(),'%B %d, %Y').strftime('%Y-%m-%d')
-                except:
-                    review["date"] = datetime.strptime(review_soup.find('span',attrs={'data-hook':"review-date"}).text.split('on')[1].strip(),'%d %B %Y').strftime('%Y-%m-%d')
-                review['review_country'] = review_soup.find('span',attrs={'data-hook':"review-date"}).text.split('Reviewed in')[1].split('on')[0].strip().strip('the ')
+                for date_formats in POSSIBLE_DATE_FORMAT:
+                    try:
+                        review["date"] = datetime.strptime(review_date_soup.text.split('on')[1].strip(), date_formats).strftime('%Y-%m-%d')
+                    except:
+                        pass
+
+                review['review_country'] = review_date_soup.text.split('Reviewed in')[1].split('on')[0].strip().strip('the ')
                 
             if review_soup.find('div',attrs={"data-hook":"genome-widget"}):
                 review['profile'] = {
@@ -118,7 +132,7 @@ def get_top_reviews(soup):
         
             if images:
                 review['images'] = [
-                    {'link':img}
+                    {'link':img.strip()}
                     for img in images.split(',')
                 ]
 
@@ -171,7 +185,7 @@ def get_frequently_bought_together(soup):
             if item.find('span',class_='a-size-base a-text-bold'):continue
             product = {}
             
-            product['asin'] = unquote(item.select_one('div.a-cardui div.a-section.a-spacing-none a')['href']).split('/dp/')[1].split('/')[0]
+            product['asin'] = get_asin(item.select_one('div.a-cardui div.a-section.a-spacing-none a')['href'])
             product['title'] = item.select('div.a-cardui div.a-section.a-spacing-none a')[1].text
             product['link'] = item.select_one('div.a-cardui div.a-section.a-spacing-none a')['href']
             product['image'] = item.select_one('div.a-cardui div.a-section.a-spacing-none a img')['src']
@@ -198,7 +212,7 @@ def get_also_bought(soup,selector):
     for item in soup.select(selector):
         try:
             product = {}
-            product['asin'] = unquote(item.select_one('a.a-link-normal')['href']).split('/dp/')[1].split('/')[0]
+            product['asin'] = get_asin(item.select_one('a.a-link-normal')['href'])
             product['title'] = item.select_one('a.a-link-normal div[aria-hidden="true"]').text.strip()
             product['link'] = item.select_one('a.a-link-normal')['href']
             product['image'] = item.select_one('a img')['src']
@@ -218,7 +232,7 @@ def get_shop_by_look(soup):
     for item in soup.select('div.shopbylook-btf-items-section div.shopbylook-btf-item-box'):
         try:
             product = {}
-            product['asin'] = unquote(item.select_one('a.sbl-image-link')['href']).split('/dp/')[1].split('/')[0]
+            product['asin'] = get_asin(item.select_one('a.sbl-image-link')['href'])
             product['link'] = item.select_one('a.sbl-image-link')['href']
             product['title'] = item.select_one('a.sbl-image-link img')['alt']
             product['image'] = item.select_one('a.sbl-image-link img')['data-src']
@@ -446,7 +460,7 @@ def get_bundles(soup):
     for row in soup.select('#bundleV2_feature_div li'):
         try:
             bundle = {}
-            bundle['asin'] = unquote(row.select_one('a.a-link-normal')['href']).split('/dp/')[1].split('/')[0]
+            bundle['asin'] = get_asin(row.select_one('a.a-link-normal')['href'])
             bundle['title'] = row.select_one('span.pba-lob-bundle-title span.a-truncate-full').text.strip()
             bundle['link'] = row.select_one('a.a-link-normal')['href']
             bundle['image'] = row.select_one('img.pba-lob-bundle-image')['src']
@@ -475,7 +489,7 @@ def get_bundle_contents(soup):
     for row in soup.select('div.bundle-components div.a-row'):
         try:
             bundle = {}
-            bundle['asin'] =unquote(row.select_one('div.bundle-comp-title a')['href']).split('/dp/')[1].split('/')[0]
+            bundle['asin'] =get_asin(row.select_one('div.bundle-comp-title a')['href'])
             bundle['title'] = row.select_one('div.bundle-comp-title a').text.strip()
             bundle['link'] = row.select_one('div.bundle-comp-title a')['href']
             bundle['image'] = row.select_one('img.a-thumbnail-right')['src']
@@ -523,7 +537,7 @@ def get_aplus_content(maybe_brand_story_soup):
             try:
                 product = {}
 
-                product['asin'] = unquote(item['href']).split('/dp/')[1].split('/')[0]
+                product['asin'] = get_asin(item['href'])
                 product['title'] = item.select_one('img')['alt']
                 product['link'] = item['href']
                 product['image'] = item.select_one('img')['data-src']
@@ -620,6 +634,56 @@ def get_legal_features(soup):
         if raw_text:
             legal_features['raw_text'] = [clean_str(li.text) for li in raw_text]
         return legal_features
+
+
+def get_rating_info(soup):
+    try:
+        rating_soup  = soup.find('span',id="acrCustomerReviewText")
+        rating_info = {}
+        if rating_soup:
+            rating_info['total_ratings'] = int(rating_soup.text.split('rating')[0].strip().replace(',',''))
+        elif soup.select_one('span[data-hook="total-review-count"]'):
+            rating_info['total_ratings'] = int(soup.select_one('span[data-hook="total-review-count"]').text.split()[0].strip().replace(',',''))
+        elif soup.select_one('div[data-hook="total-review-count"] span'):
+            rating_info['total_ratings'] = int(soup.select_one('div[data-hook="total-review-count"] span').text.split()[0].strip().replace(',',''))
+        rating_breakdown = []
+
+        if soup.select('table#histogramTable tr'):
+            for row in soup.select('table#histogramTable tr'):
+                tds = row.find_all('td')
+                try:
+                    if tds:
+                        rating_breakdown.append({tds[0].a.text.strip() :{
+                            'percentage' : tds[2].text.strip().replace('%',''),
+                            'count' :round(rating_info['total_ratings'] * (int(tds[2].text.strip().replace('%','')) / 100)) if int(tds[2].text.strip().replace('%','')) else 0
+                        }})
+                except:
+                    ...
+            
+        elif soup.select('ul#histogramTable li'):
+            for row in soup.select('ul#histogramTable li'):
+                try:
+                    start= [element.strip() for element in row.find('div', class_='a-section a-spacing-none a-text-left aok-nowrap').contents if isinstance(element, str) and element.strip()][0]
+                    percentage =  [element.strip() for element in row.find('div', class_='a-section a-spacing-none a-text-right aok-nowrap').contents if isinstance(element, str) and element.strip()][0].replace('%','')
+                    if int(percentage) == 0:
+                        count = 0
+                    else:
+                        count =round(rating_info['total_ratings'] * (int(percentage) / 100))
+                    
+                    rating_breakdown.append({
+                        start:{
+                            'percentage' : percentage,
+                            'count' : count
+                        }
+                    })
+                except:
+                    ...
+        if rating_breakdown:
+            rating_info['rating_breakdown'] = rating_breakdown
+
+        return rating_info
+    except:
+        ...
 
 def amazon_parser(url,domain,page_html,asin=None):
 
@@ -789,49 +853,9 @@ def amazon_parser(url,domain,page_html,asin=None):
         
     # total ratings
     # rating_breakdown
-    try:
-        rating_soup  = soup.find('span',id="acrCustomerReviewText")
-        if rating_soup:
-            details['total_ratings'] = int(rating_soup.text.split('rating')[0].strip().replace(',',''))
-        else:
-            details['total_ratings'] = int(soup.select_one('span[data-hook="total-review-count"]').text.split()[0].strip().replace(',',''))
-        if soup.select('table#histogramTable tr'):
-            rating_breakdown = []
-            for row in soup.select('table#histogramTable tr'):
-                tds = row.find_all('td')
-                try:
-                    if tds:
-                        rating_breakdown.append({tds[0].a.text.strip() :{
-                            'percentage' : tds[2].text.strip().replace('%',''),
-                            'count' :round(details['total_ratings'] * (int(tds[2].text.strip().replace('%','')) / 100)) if int(tds[2].text.strip().replace('%','')) else 0
-                        }})
-                except:
-                    ...
-            details['rating_breakdown'] = rating_breakdown
-        elif soup.select('ul#histogramTable'):
-            rating_breakdown = []
-            for row in soup.select('ul#histogramTable li'):
-                try:
-                    start= [element.strip() for element in row.find('div', class_='a-section a-spacing-none a-text-left aok-nowrap').contents if isinstance(element, str) and element.strip()][0]
-                    percentage =  [element.strip() for element in row.find('div', class_='a-section a-spacing-none a-text-right aok-nowrap').contents if isinstance(element, str) and element.strip()][0].replace('%','')
-                    if int(percentage) == 0:
-                        count = 0
-                    else:
-                        count =round(details['total_ratings'] * (int(percentage) / 100))
-                    
-                    rating_breakdown.append({
-                        start:{
-                            'percentage' : percentage,
-                            'count' : count
-                        }
-                    })
-                except:
-                    ...
-            details['rating_breakdown'] = rating_breakdown
-        
-    except:
-        ...
-    
+    rating_info = get_rating_info(soup)
+    if rating_info:
+        details = details|rating_info
     
     # MarketPlace ID
     try:
@@ -1157,7 +1181,7 @@ def amazon_parser(url,domain,page_html,asin=None):
     maybe_new_model_soup = soup.find(id="newer-version")
     if maybe_new_model_soup:
         details['newer_model'] = {}
-        details['newer_model']['asin'] = unquote(maybe_new_model_soup.select_one('a.a-link-normal')['href']).split('/dp/')[-1].split('/')[0]
+        details['newer_model']['asin'] = get_asin(maybe_new_model_soup.select_one('a.a-link-normal')['href'])
         details['newer_model']['title'] = maybe_new_model_soup.select_one('a.a-link-normal.a-size-base').text.strip()
         details['newer_model']['link'] = maybe_new_model_soup.select_one('a.a-link-normal.a-size-base')['href']
         details['newer_model']['image'] = maybe_new_model_soup.select_one('a img')['src']
@@ -1179,7 +1203,7 @@ def amazon_parser(url,domain,page_html,asin=None):
     if maybe_similar_to_consider_soup:
         details['similar_to_consider'] = {}
         details['similar_to_consider'] = {}
-        details['similar_to_consider']['asin'] = unquote(maybe_similar_to_consider_soup.select_one('a.a-link-normal')['href']).split('/dp/')[-1].split('/')[0]
+        details['similar_to_consider']['asin'] = get_asin(maybe_similar_to_consider_soup.select_one('a.a-link-normal')['href'])
         details['similar_to_consider']['title'] = maybe_similar_to_consider_soup.select_one('a.a-link-normal.a-size-base').text.strip()
         details['similar_to_consider']['link'] = maybe_similar_to_consider_soup.select_one('a.a-link-normal.a-size-base')['href']
         details['similar_to_consider']['image'] = maybe_similar_to_consider_soup.select_one('a img')['src']
@@ -1206,8 +1230,102 @@ def amazon_parser(url,domain,page_html,asin=None):
         details['releted_product'] = releted_product
 
     # Top reviews
-    top_reviews = get_top_reviews(soup)
+    top_reviews = get_reviews_info(soup)
     if top_reviews:
         details['top_reviews'] = top_reviews
 
     return details
+
+def get_top_review_details(review_soup):
+    try:
+        review = {
+            'id' : review_soup.find(id=re.compile('viewpoint-')).get('id').split('-')[-1],
+            'title' : clean_str(review_soup.select_one('span[data-hook="review-title"]').text.strip()),
+            'body' : clean_str(review_soup.select_one('div.a-row.a-spacing-top-mini').text.strip()),
+            'body_html' : review_soup.select_one('div.a-row.a-spacing-top-mini').prettify(),
+        }
+        if review_soup.find('i',attrs={'data-hook':"review-star-rating-view-point"}):
+            review['rating'] = review_soup.find('i',attrs={'data-hook':"review-star-rating-view-point"}).text.split('out')[0].strip()
+        
+        if review_soup.select_one('span.review-votes'):
+            review['helpful_votes'] = review_soup.select_one('span.review-votes').text.split()[0]
+        
+        review_date_soup = review_soup.select_one('span.review-date')
+        if review_date_soup:
+            review['date'] ={
+                "raw" : clean_str(review_date_soup.text),
+            }
+            for date_formats in POSSIBLE_DATE_FORMAT:
+                try:
+                    review["date"] = datetime.strptime(review_date_soup.text.split('on')[1].strip(), date_formats).strftime('%Y-%m-%d')
+                except:
+                    pass
+
+            review['review_country'] = review_date_soup.text.split('Reviewed in')[1].split('on')[0].strip().strip('the ')
+            
+        if review_soup.find('div',attrs={"data-hook":"genome-widget"}):
+            review['profile'] = {
+                'name':clean_str(review_soup.select_one("div[data-hook='genome-widget'] span.a-profile-name").text),
+            }
+            if review_soup.select_one("div[data-hook='genome-widget'] a.a-profile"):
+                review['profile']['link'] = review_soup.select_one("div[data-hook='genome-widget'] a.a-profile")['href']
+                review['profile']['id'] = review_soup.select_one("div[data-hook='genome-widget'] a.a-profile")['href'].split('amzn1.account.')[1].split('/')[0]
+        return review
+    except:
+        ...
+
+def amazon_review_parser(html,domain):
+    soup = BeautifulSoup(html, 'html.parser')
+
+    maybe_product_soup = soup.select_one('div.product-title h1 a')
+    review_info = {}
+    if maybe_product_soup:
+        for a in soup.select('a[href]'):
+                if not a['href'].startswith('http'):
+                    a['href'] = 'https://'+domain+a['href']
+
+        review_info['product'] = {
+            'title':clean_str(maybe_product_soup.text.strip()),
+            'asin': get_asin(maybe_product_soup['href']),
+            'link': maybe_product_soup['href'],
+            'image':soup.select_one('div.product-image img')['src']
+        }
+        
+        sub_title_soup = soup.select_one('#cr-arp-byline')
+        if sub_title_soup:
+            review_info['product']['sub_title'] = {}
+            review_info['product']['sub_title']['text'] =clean_str(sub_title_soup.text)
+            if sub_title_soup.find('a'):
+                review_info['product']['sub_title']['link'] = sub_title_soup.find('a')['href']
+        
+        rating_info = get_rating_info(soup)
+        if rating_info:
+            review_info  = review_info | rating_info
+        
+        review_soup = soup.select_one('div[data-hook="cr-filter-info-review-rating-count"]')
+
+        if review_soup:
+            review_info['total_review_count'] = review_soup.text.split('ratings,')[1].split('with')[0].strip()
+
+        top_positive_review = get_top_review_details(soup.select_one('div.positive-review'))
+        if top_positive_review:
+            review_info['top_positive_review'] = top_positive_review
+
+        top_critical_review = get_top_review_details(soup.select_one('div.critical-review'))
+        if top_critical_review:
+            review_info['top_critical_review'] = top_critical_review
+
+        reviews = get_reviews_info(soup)
+        if reviews:
+            review_info['reviews'] = reviews
+
+        next_page_link = soup.select_one('li.a-last a')
+        if next_page_link:
+            review_info['next_page_link'] = next_page_link['href']
+
+        previos_page_link = soup.select_one('li.a-last').previous_sibling.find('a')
+        if previos_page_link and 'a-disabled' not in previos_page_link.attrs.get('class',[]):
+            review_info['previos_page_link'] = previos_page_link['href']
+
+        return review_info
+   
