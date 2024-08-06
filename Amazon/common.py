@@ -16,9 +16,18 @@ from rq import Queue, Retry
 from redis import Redis
 
 
-# API_KEYS = getenv('API_KEYS').split(',')
+API_KEYS = getenv('API_KEYS').split(',')
 
-API_KEYS = ['YV749KjNlvgdbjsVWkW3','YV749KjNlvgdbjsVWkW4']
+class MokeRequest:
+
+    def __init__(self,status_code,text):
+        self.status_code = status_code
+        self.text = json.dumps(text)
+
+    def json(self):
+        return json.loads(self.text)
+        
+
 def send_req_syphoon(
     scraper_class, method, url, params=None, headers=None, payload=None, cookies=None, total_retries=5
 ):

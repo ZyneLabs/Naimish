@@ -1,19 +1,10 @@
 from bs4 import BeautifulSoup
 import json
-from common import send_req_syphoon,findall_text_between,clean_str
+from common import send_req_syphoon,findall_text_between,clean_str,MokeRequest
 import requests
 import json
 import jsbeautifier
-
-class MokeRequest:
-
-    def __init__(self,status_code,text):
-        self.status_code = status_code
-        self.text = json.dumps(text)
-
-    def json(self):
-        return json.loads(self.text)
-            
+    
 def walmart_scraper(product_url,max_try=3):
     while max_try:
         try:
@@ -24,7 +15,7 @@ def walmart_scraper(product_url,max_try=3):
             max_try -= 1
 
         except Exception as e:
-            req = MokeRequest(400,{"message":"This request wants to charge you"})
+            req = MokeRequest(400,{"message":"This request will not charge you"})
 
     return req
 
