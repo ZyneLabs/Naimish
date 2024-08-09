@@ -59,3 +59,19 @@ def send_req_syphoon(
         except Exception as ex:
             retry_count += 1
 
+
+def get_digit_groups(input_str):
+    if input_str is None:
+        return []
+    return re.findall(r'\d+', input_str)
+
+def clean_str(input_str, sep="|"):
+    if input_str is None:
+        return ""
+
+    if type(input_str) is not str:
+        return input_str
+
+    input_str = re.sub(r"\s+", " ", input_str).replace("\n", sep).replace("\u200e", '').replace('\u200f','')
+
+    return input_str.strip()
