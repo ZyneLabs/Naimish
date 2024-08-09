@@ -7,7 +7,7 @@ redis_url = os.getenv('REDIS_URI')
 
 subprocess.Popen(['rq-dashboard', '--redis-url',redis_url])
 
-listen = ['default','Automalluae','Cars24','Carswitch','Dubaicars','Kavak','Yallamotor','Dubizzle','Opensooq']
+listen = ['default','Automalluae','Cars24','Carswitch','Dubaicars','Kavak','Yallamotor','Dubizzle','Opensooq','Reddit']
 
 conn = Redis.from_url(redis_url)
 
