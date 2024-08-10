@@ -6,3 +6,4 @@ lxml
 pymongo
 rq-dashboard
 python-dotenv
+xmltodict
