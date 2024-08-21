@@ -7,6 +7,7 @@ from Carswitch import CarswitchCrawler
 from Dubaicars import DubaiCarsCrawler
 from Dubizzle import DubizzleCrawler
 from Kavak import KavakCrawler
+from Firstchoicecars import FirstchoicecarsCrawler
 from save_crawled_data import save_data
 
 import os
@@ -25,7 +26,8 @@ queue_dict= {
     CarswitchCrawler:'Carswitch',
     DubaiCarsCrawler:'Dubaicars',
     DubizzleCrawler:'Dubizzle',
-    KavakCrawler:'Kavak'
+    KavakCrawler:'Kavak',
+    FirstchoicecarsCrawler:'Firstchoicecars'
 }
 redis_conn = Redis()
 
@@ -53,7 +55,7 @@ def run_crawler_and_worker(crawler, queue_name):
 
 def start_crawler():
     worker_processes = []
-    crawlers = [AlbacarsCrawler, AltayermotorsCrawler, AutomalluaeCrawler, CarnabCrawler, Cars24Crawler, CarswitchCrawler, DubaiCarsCrawler, DubizzleCrawler, KavakCrawler]
+    crawlers = [AlbacarsCrawler, AutomalluaeCrawler, AltayermotorsCrawler, CarnabCrawler, Cars24Crawler, CarswitchCrawler, DubaiCarsCrawler, DubizzleCrawler, KavakCrawler, FirstchoicecarsCrawler]
     
     for crawler in crawlers:
         p = Process(target=run_crawler_and_worker, args=(crawler, queue_dict[crawler]))
