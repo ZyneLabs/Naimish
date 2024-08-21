@@ -205,7 +205,11 @@ def avenet_parser(url):
 
     res = send_req_syphoon(0, "GET", url, headers=headers)
     product_html = res.text
-    inventory_json = send_inventory_req(product_id,url) if "Int'l" not in product_html else send_pf_inventory_req(product_id,url)
+
+    soup = BeautifulSoup(product_html, 'html.parser')
+    maybe_international_stock = soup.find(string=re.compile("Int'l:"))
+    if maybe_international_stock:
+        maybe_international_stock = maybe_international_stock.find_parent('div',id='priceAvailability')
+    inventory_json = send_inventory_req(product_id,url) if maybe_international_stock else send_pf_inventory_req(product_id,url)
 
     return parse_price_inventory_content(product_html,inventory_json)
-
