@@ -68,21 +68,16 @@ def send_inventory_req(product_id, product_url):
         print(ex)
         return {'message' : 'Inventory page loading failed'}
     
-def parse_price_inventory_content(price_inventory_content):
-    soup = bs(price_inventory_content, "html.parser")
+def parse_price_inventory_content(product_html,inventory_json):
+    soup = bs(product_html, "html.parser")
 
     details = {}
 
-    try:
-        maybe_mult_qty =int (get_digit_groups(price_inventory_content.split('"multQuantity":')[1].split(',')[0])[0])
-        details["increment_of_qty"] = maybe_mult_qty
-    except Exception as ex:
-        ...
 
     try:
         product_json = json.loads(soup.find("script", {"type": "application/ld+json"}).text)
         product_id = product_json["url"].split("-")[-1].replace('/','')
-       
+        details['url'] = product_json['url']
         rows = {
             "{:,}+".format(int(get_digit_groups(row['eligibleQuantity']['minValue'])[0])): row['price']
             for row in product_json['offers'][0]['offers']
@@ -98,6 +93,12 @@ def parse_price_inventory_content(price_inventory_content):
         ...
 
     try:
+        maybe_mult_qty =int (get_digit_groups(product_html.split('"multQuantity":')[1].split(',')[0])[0])
+        details["increment_of_qty"] = maybe_mult_qty
+    except Exception as ex:
+        ...
+
+    try:
         details["total_price"] ='{:,}'.format(round(float(details["selling_price"]) * float(
             int(details["minimum_order_qty"].replace(',',''))
         ),2))
@@ -105,14 +106,13 @@ def parse_price_inventory_content(price_inventory_content):
         ...
 
     try:
-        inventory_info = send_inventory_req(product_id,product_json["url"]) if "Int'l" not in price_inventory_content else send_pf_inventory_req(product_id,product_json["url"])
-        maybe_factory_stock = int(get_digit_groups(inventory_info['InventoryAvailability'][product_id].get('factoryInventory','0'))[0])
-        maybe_current_stock = inventory_info['InventoryAvailability'][product_id]['availableQuantity'] if "Int'l" not in price_inventory_content else maybe_factory_stock
+        maybe_factory_stock = int(get_digit_groups(inventory_json['InventoryAvailability'][product_id].get('factoryInventory','0'))[0])
+        maybe_current_stock = inventory_json['InventoryAvailability'][product_id]['availableQuantity'] if "Int'l" not in product_html else maybe_factory_stock
         if maybe_current_stock :
             details['stock_condtion'] = {'In Stock': maybe_current_stock}
 
         elif maybe_factory_stock :
-            if 'Partner Stock' in price_inventory_content:
+            if 'Partner Stock' in product_html:
                 details['stock_condtion'] = {'Partner Stock': maybe_factory_stock}
             else:
                 details['stock_condtion'] = {'Factory Stock': maybe_factory_stock}
@@ -149,7 +149,7 @@ def parse_price_inventory_content(price_inventory_content):
     try:
 
         maybe_in_stock_soup = soup.select('span.in-stock.green-pdp ~ div.grey')
-        if len(maybe_in_stock_soup) != 0 and "Int'l:" not in price_inventory_content :
+        if len(maybe_in_stock_soup) != 0 and "Int'l:" not in product_html :
             if maybe_current_stock:
                 details["distributor_ship_or_lead_time_org"] = maybe_in_stock_soup[0].text.strip()
                 details["distributor_ship_or_lead_time"] = maybe_in_stock_soup[0].text.replace(
@@ -166,13 +166,13 @@ def parse_price_inventory_content(price_inventory_content):
         ...
 
     try:
-        maybe_factory_lead_time = inventory_info['InventoryAvailability'][product_id]['leadTimeMsg']
+        maybe_factory_lead_time = inventory_json['InventoryAvailability'][product_id]['leadTimeMsg']
         if maybe_factory_lead_time:
             details["manufacture_lead_time"] = maybe_factory_lead_time
             details["manufacture_lead_time_org"] = "Factory Lead Time: " + maybe_factory_lead_time
     except:
         try:
-            maybe_factory_lead_time = int(get_digit_groups(price_inventory_content.split('"factoryLeadTime":')[1].split(',')[0])[0])
+            maybe_factory_lead_time = int(get_digit_groups(product_html.split('"factoryLeadTime":')[1].split(',')[0])[0])
             weeks = maybe_factory_lead_time // 7
             days = maybe_factory_lead_time % 7
             
@@ -190,32 +190,22 @@ def parse_price_inventory_content(price_inventory_content):
     return details
 
 
-
-if __name__ == "__main__":
-  
+def avenet_parser(url):
+    product_id = url.split("-")[-1].replace('/','')
     headers = {
-    'sec-ch-ua': '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
-    'sec-ch-ua-mobile': '?0',
-    'sec-ch-ua-platform': '"Windows"',
-    'sec-fetch-dest': 'empty',
-    'sec-fetch-mode': 'cors',
-    'sec-fetch-site': 'same-origin',
-    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-    'Content-Type': 'application/json'
-    }
+        'sec-ch-ua': '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-origin',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'Content-Type': 'application/json'
+    }  
 
-    urls = [
-    'https://www.avnet.com/shop/us/products/amphenol/d38999-20wb98pn-3074457345628683660/',
-     'https://www.avnet.com/shop/us/products/amphenol/d38999-26wd35sn-3074457345628685390/',
-     'https://www.avnet.com/shop/us/products/microchip/mcp6544-i-st-3074457345627031814/',
-     'https://www.avnet.com/shop/us/products/kyocera-avx/w3a4yc104k4t2a-3074457345647490243/',
-     'https://www.avnet.com/shop/us/products/stmicroelectronics/tda7491hv13tr-3074457345659594372/'
-    ]
-    for indx,url in enumerate(urls):
-        indx+=11
-        res = send_req_syphoon(0, "GET", url, headers=headers)
-        with open(f'success_2/{indx}.html','w',encoding='utf-8') as f:
-            f.write(res.text)
-        with open(f'{indx}.json','w') as f:
-            json.dump({'url':url,'status':res.status_code}|parse_price_inventory_content(res.text),f,indent=4)
+    res = send_req_syphoon(0, "GET", url, headers=headers)
+    product_html = res.text
+    inventory_json = send_inventory_req(product_id,url) if "Int'l" not in product_html else send_pf_inventory_req(product_id,url)
+
+    return parse_price_inventory_content(product_html,inventory_json)
 
