@@ -114,8 +114,7 @@ async function main() {
                 } else if (response) {
                     await Actor.pushData(response.data);
                 }
-
-                if (request.retryCount > 0) {
+                else if (request.retryCount > 0) {
                     defaultQueue.push(request);
                     console.log(`Retrying ${request.url}...`);
                 }
