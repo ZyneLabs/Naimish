@@ -5,6 +5,17 @@ import requests
 import os
 from urllib.parse import quote_plus
 
+try:
+    from deep_translator import GoogleTranslator
+    translator = GoogleTranslator()
+except ModuleNotFoundError:
+    print("Deep Translator module not found. Please run 'pip install deep-translator' to install it.")
+    exit(1)
+
+
+def get_digits(input_str):
+    return re.sub(r"[^0-9]", "", input_str)
+
 def mouser_scraper(url,method='get',max_tries=5):
     while True:
         try:
@@ -29,7 +40,7 @@ def clean_str(input_str, sep="|"):
     if type(input_str) is not str:
         return input_str
 
-    input_str = re.sub(r"\s+", " ", input_str).replace("\n", sep).replace("\u200e", '').replace('\u200f','')
+    input_str = re.sub(r"\s+", " ", input_str).replace("\n", sep).replace("\u200e", '').replace('\u200f','').replace('\xa0','')
 
     return input_str.strip()
 
@@ -104,23 +115,28 @@ def mouser_parser(html:str):
         # 12. Factory Lead Time
         maybe_lead_time = soup.select_one('#factoryLeadTimeMsg')
         if maybe_lead_time:
-            details['Factory_Lead_Time'] = maybe_lead_time.parent.get_text(strip=True).split('Estimated')[0]
+            print(maybe_lead_time.parent.get_text(strip=True))
+            maybe_lead_time = translator.translate(maybe_lead_time.parent.get_text(strip=True))
+            print(maybe_lead_time)
+            details['Factory_Lead_Time'] = maybe_lead_time.split('Estimated')[0]
 
         # 13. Minimum_Order
         maybe_minimum_order = soup.select_one('#minmultdisplaytext')
         if maybe_minimum_order:
-            details['Minimum_Order'] = maybe_minimum_order.get_text(strip=True).split('Minimum:')[1].split()[0].replace('&nbsp','')
+            details['Minimum_Order'] = maybe_minimum_order.get_text(strip=True).split('Minimum')[1].split()[0].replace('&nbsp','').replace(':',"")
 
         # 14. Product Title
         details['Product_Title'] = maybe_product_title.get_text(strip=True)
 
         # 15. Product Image
-        product_json = json.loads(soup.find('script',attrs={'type':"application/ld+json"},string=re.compile('"Product"')).get_text(strip=True))
-        details['Product_Images'] = product_json['image']
-
+        try:
+            product_json = json.loads(soup.find('script',attrs={'type':"application/ld+json"},string=re.compile('"Product"')).get_text(strip=True))
+            details['Product_Images'] = product_json['image']
+        except:
+            details['Product_Images'] = soup.select_one('meta[property="og:image"]').get('content')
         maybe_more_imgages = soup.select_one('#plusMoreImagesText')
         if maybe_more_imgages:
-            image_count = int(maybe_more_imgages.get_text(strip=True).split(' ')[0])
+            image_count = int(get_digits(maybe_more_imgages.get_text(strip=True)))
             images = [details['Product_Images']]
             for i in range(1,image_count+1):
                 images.append(details['Product_Images'].replace('_t.JPG',f'_{i}.JPG'))
@@ -129,13 +145,13 @@ def mouser_parser(html:str):
         maybe_pricing_table = soup.select_one('.pdp-pricing-table')
         if maybe_pricing_table:
             # 16. Volume breakdown
-            details['Volume_Breakdown'] = [ i.get_text(strip=True) for i in maybe_pricing_table.find_all(attrs={'headers':"quantitycolhdr"})]
+            details['Volume_Breakdown'] = [ clean_str(i.get_text(strip=True)) for i in maybe_pricing_table.find_all(attrs={'headers':"quantitycolhdr"})]
 
             # 17. Exect Price
-            details['Exect_Price'] = [ i.get_text(strip=True) for i in maybe_pricing_table.find_all(attrs={'headers':"extpricecolhdr"})]
+            details['Exect_Price'] = [ clean_str(i.get_text(strip=True)) for i in maybe_pricing_table.find_all(attrs={'headers':"extpricecolhdr"})]
 
             # 18. Unit Price
-            details['Unit_Price'] = [ i.get_text(strip=True) for i in maybe_pricing_table.find_all(attrs={'headers':"unitpricecolhdr"})]
+            details['Unit_Price'] = [ clean_str(i.get_text(strip=True)) for i in maybe_pricing_table.find_all(attrs={'headers':"unitpricecolhdr"})]
 
         # 22. Specifications
         details['Specifications'] = []
@@ -147,21 +163,21 @@ def mouser_parser(html:str):
             for row in maybe_specification_table:
                 key = clean_str(row.select_one('td.attr-col').text).replace(':','')
                 value = clean_str(row.select_one('td.attr-value-col').text)
-
+                comp_key = translator.translate(key)
                 # 23. RoHS
-                if key == 'RoHS':
-                    details['RoHS'] = 'Yes' if value == 'Details' else value
+                if comp_key == 'RoHS':
+                    details['RoHS'] = 'Yes' if translator.translate(value) == 'Details' else value
                 
                 # 24. Series
-                elif key == 'Series':
+                elif comp_key == 'Series':
                     details['Series'] = value
 
                 #28. Packaging 
-                elif 'Packaging' == key:
+                elif 'Packaging' == comp_key:
                     details['Packaging'].append(value)
 
                 # 29. Factory Pack Quantity
-                elif 'Factory Pack Quantity' in key:
+                elif 'Factory Pack Quantity' in comp_key:
                     key = 'Factory Pack Quantity'
                     details['Factory_Pack_Quantity'] = value
 
@@ -174,7 +190,12 @@ def mouser_parser(html:str):
         maybe_more_info = soup.select('#pdpProdMoreInfo #detail-feature-desc')
         if maybe_more_info:
             for item in maybe_more_info:
-                key = clean_str(item.select_one('h3').text)
+                if item.select_one('h3'):
+                    key = clean_str(item.select_one('h3').text)
+                elif item.select_one('h2'):
+                    key = clean_str(item.select_one('h2').text)
+                else:
+                    continue
                 val = clean_str(' '.join([i.text for i in item.select('p') if i.text]))
                 details['Specifications'].append(f'{key}: {val}')
 
@@ -273,9 +294,8 @@ def mouser(url):
         return None
     
     html = req.text
-
     data,pid = mouser_parser(html)
-    if data.get('Environment_Documents') and data.get('Environment_Documents') !='none' and  not data.get('Environment_Documents').split('|')[0].startswith('https'):
+    if data.get('Environment_Documents') and data.get('Environment_Documents') !='none' and  not data.get('Environment_Documents').startswith('https'):
         # this is not working we need to check this
         print(data.get('Environment_Documents'))
         environment_doc_url = f'https://www.mouser.com/Product/Product/GetEnvironmentalDocs?objectId={data.get("Environment_Documents")}'
@@ -293,3 +313,4 @@ def mouser(url):
         data['Also_Bought_Products'] = []
 
     return data
+
