@@ -1,6 +1,14 @@
 from common import *
 from urllib.parse import unquote
+from googletrans import Translator, constants
+try:
+    from deep_translator import GoogleTranslator
+    translator = GoogleTranslator()
+except ModuleNotFoundError:
+    print("Deep Translator module not found. Please run 'pip install deep-translator' to install it.")
+    exit(1)
 
+# from Amazon_seller import get_other_sellers
 
 headers = {
     'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -28,39 +36,57 @@ headers = {
 }
 
 cookies = {
-    'amazon.com':'i18n-prefs=USD;  lc-main=en_US',
+    'amazon.com':'i18n-prefs=USD;  lc-main=en_US; session-token=58vPJ+8k0yaQrB9jsJuVnaDLpXlAWAjuCZrbX1IKEvZsRE2T0NfJx2Kpow70YhJoccBd/SP2cui+YbdSBIsh+6pS7welvg/lYzbp8H91pnKsDPMeBFCd3KBbCGxY5+kBKYRxrlBMXcwGdlJ014Vt2IX+wMU3r1KqLLW29uthH7J4xU17uLELKSjtSQ1Fihaieb8qXN4UfsEGeJmFgfskgroBZRJ9Aw3ESOPBofAgbYzh5Rdr0A5NWbq3u7plZKE8edQGhgoApJ26sfOGeW2MBlS7RfE8ALfQmHi0HRaCbAS4YFvc7zHBgdSlJh5KnzToyi2mqjG/MW1+7/+ijpUckqz4tJeTwo5g',
     'amazon.co.uk':'i18n-prefs=GBP;  lc-main=en_GB',
-    'amazon.ca':'i18n-prefs=CAD;  lc-main=en_CA'
+    'amazon.ca':'i18n-prefs=CAD;  lc-main=en_CA',
+    'amazon.de':'i18n-prefs=EUR;  lc-main=en_GB',
+    'amazon.fr':'i18n-prefs=EUR;'
 }
 
 country_code = {
     'amazon.com':'us',
     'amazon.co.uk':'uk',
-    'amazon.ca':'ca'
+    'amazon.ca':'ca',
+    'amazon.de':'de',
+    'amazon.fr':'fr'
 }
 
 
 POSSIBLE_DATE_FORMAT = ['%B %d, %Y','%d %B %Y']
 
-def amazon_scraper(url,filename,domain):
-    # kepping html for a day
-    date = datetime.now().strftime("%Y%m%d")
-    os.makedirs(date,exist_ok=True)
-    headers['cookie'] = cookies[domain]
+def amazon_scraper(url, domain:str, custom_cookies:str=None ,filename:str=None):
+    if custom_cookies:
+        headers['cookie'] = custom_cookies
+    else:
+        headers['cookie'] = cookies[domain]
+
     payload = {'country_code':country_code[domain]}
-    try:
-        with open(f'{date}/{filename}.html','r',encoding='utf-8') as f:
-            html = f.read()
-    except:
+
+    if filename:
+        # kepping html for a day
+        date = datetime.now().strftime("%Y%m%d")
+        os.makedirs(date,exist_ok=True)
+        
         try:
-            req = send_req_syphoon(1,'get',url,headers=headers,payload=payload)
+            with open(f'{date}/{filename}.html','r',encoding='utf-8') as f:
+                html = f.read()
+        except:
+            try:
+                req = send_req_syphoon(1,'get',url,headers=headers,payload=payload)
+                req.raise_for_status()
+                html = req.text
+                with open(f'{date}/{filename}.html','w',encoding='utf-8') as f:
+                    f.write(html)
+            except Exception as ex:
+                return {'message':f'Error in sending request {url}'}
+    else:
+        try:
+            req = send_req_syphoon(0,'get',url,headers=headers,payload=payload)
             req.raise_for_status()
             html = req.text
-            with open(f'{date}/{filename}.html','w',encoding='utf-8') as f:
-                f.write(html)
         except Exception as ex:
             return {'message':f'Error in sending request {url}'}
-
+        
     return html
 
 def normalize_dict(d):
@@ -80,65 +106,75 @@ def get_reviews_info(soup):
     reviews = []
     for review_soup in soup.select('div[data-hook="review"].a-section.review.aok-relative'):
         try:
-            review = {}
-            review['id'] = review_soup['id']
+            if review_soup.find('a',attrs={"data-hook":"review-title"}) or review_soup.find('span',attrs={"data-hook":"review-title"}):
+                review = {}
+                review['id'] = review_soup['id']
 
-            if review_soup.find('a',attrs={"data-hook":"review-title"}):
-                review['title'] = review_soup.find('a',attrs={"data-hook":"review-title"}).find('span',class_=False).text.strip()
-            else:
-                review['title'] = review_soup.find('span',attrs={"data-hook":"review-title"}).text.strip()
-            
-            maybe_body_soup = review_soup.find('span',attrs={'data-hook':"review-body"})
-            if maybe_body_soup:
-                if maybe_body_soup.find('div',attrs={"data-hook":"review-collapsed"}):
-                    review['body'] = clean_str(maybe_body_soup.find('div',attrs={"data-hook":"review-collapsed"}).text)
+                if review_soup.find('a',attrs={"data-hook":"review-title"}) and review_soup.find('a',attrs={"data-hook":"review-title"}).find('span',class_=False):
+                    review['title'] = review_soup.find('a',attrs={"data-hook":"review-title"}).find('span',class_=False).text.strip()
                 else:
-                    review['body'] = clean_str(maybe_body_soup.text)
-                review['body_html']  =clean_str(maybe_body_soup.prettify())
-
-            if review_soup.find('a',attrs={"data-hook":"review-title"}):
-                review['link'] =review_soup.find('a',attrs={"data-hook":"review-title"})['href']
-            
-            if review_soup.find('i',attrs={'data-hook':"review-star-rating"}):
-                review['rating'] = review_soup.find('i',attrs={'data-hook':"review-star-rating"}).text.split('out')[0].strip()
-            else:
-                review['rating'] = review_soup.find('i',attrs={'data-hook':"cmps-review-star-rating"}).text.split('out')[0].strip()
-
-            if review_soup.find('span',attrs={'data-hook':"helpful-vote-statement"}):
-                review['helpful_votes'] = review_soup.find('span',attrs={'data-hook':"helpful-vote-statement"}).text.split()[0]
-            
-            review_date_soup = review_soup.find('span',attrs={'data-hook':"review-date"})
-            if review_date_soup:
-                review['date'] ={
-                    "raw" : clean_str(review_date_soup.text),
-                }
-                for date_formats in POSSIBLE_DATE_FORMAT:
-                    try:
-                        review["date"] = datetime.strptime(review_date_soup.text.split('on')[1].strip(), date_formats).strftime('%Y-%m-%d')
-                    except:
-                        pass
-
-                review['review_country'] = review_date_soup.text.split('Reviewed in')[1].split('on')[0].strip().strip('the ')
+                    review['title'] = review_soup.find(attrs={"data-hook":"review-title"}).text.strip()
                 
-            if review_soup.find('div',attrs={"data-hook":"genome-widget"}):
-                review['profile'] = {
-                    'name':clean_str(review_soup.select_one("div[data-hook='genome-widget'] span.a-profile-name").text),
-                }
-                if review_soup.select_one("div[data-hook='genome-widget'] a.a-profile"):
-                    review['profile']['link'] = review_soup.select_one("div[data-hook='genome-widget'] a.a-profile")['href']
-                    review['profile']['id'] = review_soup.select_one("div[data-hook='genome-widget'] a.a-profile")['href'].split('amzn1.account.')[1].split('/')[0]
-            
-            images = search_text_between(str(soup),'imagePopoverController.initImagePopover("'+review["id"]+'", "[', ']", data)')
-        
-            if images:
-                review['images'] = [
-                    {'link':img.strip()}
-                    for img in images.split(',')
-                ]
+                maybe_body_soup = review_soup.find('span',attrs={'data-hook':"review-body"})
+                if maybe_body_soup:
+                    if maybe_body_soup.find('div',attrs={"data-hook":"review-collapsed"}):
+                        review['body'] = clean_str(maybe_body_soup.find('div',attrs={"data-hook":"review-collapsed"}).text)
+                    else:
+                        review['body'] = clean_str(maybe_body_soup.text)
+                    review['body_html']  =clean_str(maybe_body_soup.prettify())
 
-            review['verified_purchase'] = True if review_soup.select_one('div.a-row.a-spacing-mini.review-data.review-format-strip a') else False
-            review['is_global_review']  = True if review_soup.find_parent('div',class_='global-reviews-content') else False
-            reviews.append(review)
+                if review_soup.find('a',attrs={"data-hook":"review-title"}):
+                    review['link'] =review_soup.find('a',attrs={"data-hook":"review-title"})['href']
+                
+                if review_soup.find('i',attrs={'data-hook':"review-star-rating"}):
+                    review['rating'] = review_soup.find('i',attrs={'data-hook':"review-star-rating"}).text.split('out')[0].strip()
+                else:
+                    review['rating'] = review_soup.find('i',attrs={'data-hook':"cmps-review-star-rating"}).text.split('out')[0].strip()
+
+                if review_soup.find('span',attrs={'data-hook':"helpful-vote-statement"}):
+                    review['helpful_votes'] = review_soup.find('span',attrs={'data-hook':"helpful-vote-statement"}).text.split()[0]
+                
+                review_date_soup = review_soup.find('span',attrs={'data-hook':"review-date"})
+
+                if review_date_soup:
+                    review_date_soup_text = review_date_soup.text
+                    review['date'] ={
+                        "raw" : clean_str(review_date_soup_text),
+                    }
+                    if 'Reviewed in' not in review_date_soup_text:
+                        review_date_soup_text = translator.translate(review_date_soup_text)
+
+                    for date_formats in POSSIBLE_DATE_FORMAT:
+                        try:
+                            review["date"] = datetime.strptime(review_date_soup_text.split('on')[1].strip(), date_formats).strftime('%Y-%m-%d')
+                        except:
+                            pass
+                        
+                    if 'Reviewed in' in review_date_soup_text:
+                        review['review_country'] = review_date_soup_text.split('Reviewed in')[1].split(' on ')[0].strip().strip('the ')
+                    elif 'left in' in review_date_soup_text:
+                        review['review_country'] = review_date_soup_text.split('left in')[1].split(' on ')[0].strip().strip('the ')
+
+                   
+                if review_soup.find('div',attrs={"data-hook":"genome-widget"}):
+                    review['profile'] = {
+                        'name':clean_str(review_soup.select_one("div[data-hook='genome-widget'] span.a-profile-name").text),
+                    }
+                    if review_soup.select_one("div[data-hook='genome-widget'] a.a-profile"):
+                        review['profile']['link'] = review_soup.select_one("div[data-hook='genome-widget'] a.a-profile")['href']
+                        review['profile']['id'] = review_soup.select_one("div[data-hook='genome-widget'] a.a-profile")['href'].split('amzn1.account.')[1].split('/')[0]
+                
+                images = search_text_between(str(soup),'imagePopoverController.initImagePopover("'+review["id"]+'", "[', ']", data)')
+            
+                if images:
+                    review['images'] = [
+                        {'link':img.strip()}
+                        for img in images.split(',')
+                    ]
+
+                review['verified_purchase'] = True if review_soup.select_one('div.a-row.a-spacing-mini.review-data.review-format-strip a') else False
+                review['is_global_review']  = True if review_soup.find_parent('div',class_='global-reviews-content') else False
+                reviews.append(review)
         except Exception as e:
             print(traceback.print_exc())
             ...
@@ -256,11 +292,12 @@ def get_variations(soup):
     variations_info = {}
     if soup.find('script',string=re.compile('dataToReturn')):
         varaition_text = search_text_between(soup.find('script',string=re.compile('dataToReturn')).text,'dataToReturn = ',';')
+        varaition_text = re.sub(r'(?<!\\)\\(?![ntr"])', r'\\\\', varaition_text)
         if not varaition_text:
             return {}
         
         variations_detail = json.loads(varaition_text.replace(''',
-                ]''',']').replace(',]',']'))
+                ]''',']').replace(',]',']'),strict=False)
         
         if not variations_detail.get('dimensionValuesDisplayData',''):
             return {}
@@ -270,11 +307,33 @@ def get_variations(soup):
         if len(avilable_variations)<=1:
             return {}
 
-        variations_info['asins'] = avilable_variations
-        variations_info['variants'] = variations_detail['variationValues']
+        variations_info['variants'] = ','.join(avilable_variations.keys()) 
+        variations_info['variant_values'] = variations_detail['variationValues']
         variations_info['color_grouping'] = variations_detail['variationValues'].get('color_name','')
         variations_info['current_selection'] =' | '.join([ f'{variations_detail["variationDisplayLabels"][k]} : {v}' for k,v in variations_detail['selected_variations'].items()])
     
+    if soup.select_one('#imageBlockVariations_feature_div script'):
+        variation_text = search_text_between(soup.select_one('#imageBlockVariations_feature_div script').text,"jQuery.parseJSON('","');")
+        variants = []
+        variation_text = re.sub(r'(?<!\\)\\(?![ntr"])', r'\\\\', variation_text)
+
+        if  variation_text:
+            image_variation_json = json.loads(variation_text,strict=False)
+            color_to_asin = image_variation_json['colorToAsin']
+
+            for name,values in image_variation_json['colorImages'].items():
+                variant= {
+                    "name": name,
+                    'images':[image.get('hiRes') if image.get('hiRes','') else image.get('large') for image in values],
+                    'asin':color_to_asin[name]['asin']
+                }
+
+                maybe_variant_price = soup.select_one(f'[data-csa-c-item-id="{variant["asin"]}"] .twisterSwatchPrice')
+                if maybe_variant_price:
+                    variant['price'] = clean_str(maybe_variant_price.text)
+                variants.append(variant)
+
+        variations_info['variants'] = variants
     return variations_info
 
 def get_price_info(soup):
@@ -549,35 +608,19 @@ def get_aplus_content(maybe_brand_story_soup):
 
 def get_bestseller_info(soup):
     bestseller_info = []
-    if soup.find('span',string=re.compile('Best Sellers Rank')):
-        bestsellers_rank_element = soup.find('span',string=re.compile('Best Sellers Rank')).find_parent('li')
-        for seller in bestsellers_rank_element.find_all('span',class_="a-list-item"):
-            seller_rank = {}
-            
-            a = seller.find('a')
-            if a:
-                if ' in ' in a.text:
-                    seller_rank['category'] = a.text.split(' in ')[1]
-                else:
-                    seller_rank['category'] = a.text
-                seller_rank['rank']= seller.text.split('in')[0].replace('#','').replace('Best Sellers Rank:','').strip()
-                seller_rank['link'] = a['href']
-                bestseller_info.append(seller_rank)
 
-    elif soup.find('th',string=re.compile('Best Sellers Rank')):
-        bestsellers_rank_element = soup.find('th',string=re.compile('Best Sellers Rank')).find_next_sibling('td')
-        for seller in bestsellers_rank_element.select('span span'):
-            seller_rank = {}
-            
-            a = seller.find('a')
-            if a:
-                if ' in ' in a.text:
-                    seller_rank['category'] = a.text.split(' in ')[1]
-                else:
-                    seller_rank['category'] = a.text
-                seller_rank['rank']= seller.text.split('in')[0].replace('#','').replace('Best Sellers Rank:','').strip()
-                seller_rank['link'] = a['href']
-                bestseller_info.append(seller_rank)
+    bestsellers_rank_elements = soup.find_all('li', string=re.compile('Best Sellers Rank'))
+    if not bestsellers_rank_elements:
+        bestsellers_rank_elements = soup.find_all('th', string=re.compile('Best Sellers Rank'))
+
+    for bestsellers_rank_element in bestsellers_rank_elements:
+        for seller in bestsellers_rank_element.find_all('span', class_='a-list-item'):
+            seller_rank = {
+                'category': seller.find('a').text.split(' in ')[-1],
+                'rank': seller.text.split('in')[0].replace('#', '').replace('Best Sellers Rank:', '').strip(),
+                'link': seller.find('a')['href']
+            }
+            bestseller_info.append(seller_rank)
 
     return bestseller_info
 
@@ -648,14 +691,13 @@ def get_rating_info(soup):
             rating_info['total_ratings'] = int(soup.select_one('div[data-hook="total-review-count"] span').text.split()[0].strip().replace(',',''))
         rating_breakdown = []
 
-        if soup.select('table#histogramTable tr'):
+        if soup.select('table#histogramTable tr') and rating_info['total_ratings']:
             for row in soup.select('table#histogramTable tr'):
                 tds = row.find_all('td')
                 try:
                     if tds:
                         rating_breakdown.append({tds[0].a.text.strip() :{
                             'percentage' : tds[2].text.strip().replace('%',''),
-                            'count' :round(rating_info['total_ratings'] * (int(tds[2].text.strip().replace('%','')) / 100)) if int(tds[2].text.strip().replace('%','')) else 0
                         }})
                 except:
                     ...
@@ -665,15 +707,9 @@ def get_rating_info(soup):
                 try:
                     start= [element.strip() for element in row.find('div', class_='a-section a-spacing-none a-text-left aok-nowrap').contents if isinstance(element, str) and element.strip()][0]
                     percentage =  [element.strip() for element in row.find('div', class_='a-section a-spacing-none a-text-right aok-nowrap').contents if isinstance(element, str) and element.strip()][0].replace('%','')
-                    if int(percentage) == 0:
-                        count = 0
-                    else:
-                        count =round(rating_info['total_ratings'] * (int(percentage) / 100))
-                    
                     rating_breakdown.append({
                         start:{
                             'percentage' : percentage,
-                            'count' : count
                         }
                     })
                 except:
@@ -689,7 +725,7 @@ def amazon_parser(url,domain,page_html,asin=None):
 
     details = {}
 
-    details['asin'] = asin 
+    details['asin'] = get_asin(url) 
     details['url'] = url 
 
     parent_asin = search_text_between(page_html,'data-parent-asin="','"')
@@ -878,10 +914,10 @@ def amazon_parser(url,domain,page_html,asin=None):
     
     # Variants    
     variation_info = get_variations(soup)
-    if variation_info:
-        details['variants'] = variation_info['variants']
+    if variation_info and variation_info.get('variants'):
+        details['variant_values'] = variation_info['variant_values']
         details['current_selection'] = variation_info['current_selection']
-        details['variant_asins'] =','.join([asin for asin in variation_info['asins']])
+        details['variants'] =variation_info['variants']
     
     maybe_formats= soup.select('#mediamatrix_feature_div span.format  a')
     if maybe_formats:
@@ -914,6 +950,7 @@ def amazon_parser(url,domain,page_html,asin=None):
                 'asin':maybe_series_soup['href'].split('/dp/')[1].split('/')[0].split('?')[0]
 
             }
+            
     # Collectible info
     maybe_collectible_soup =soup.select("#collectiblesKeyInformation_feature_div tr")
     if maybe_collectible_soup:
@@ -1075,7 +1112,7 @@ def amazon_parser(url,domain,page_html,asin=None):
     if store_disclaimer:
         details['store_disclaimer'] = clean_str(store_disclaimer.text)
 
-    details['price_info'] = get_price_info(soup)
+    details.update(get_price_info(soup))
     
     # currenctCode
     current_code = search_text_between(page_html,'currencyCode&quot;:&quot;','&quot;')
@@ -1086,17 +1123,25 @@ def amazon_parser(url,domain,page_html,asin=None):
         
     # Stock Count
     if soup.find(id="availability"):
-        in_stock_text = soup.find(id="availability").text.strip()    
-        if get_digit_groups(in_stock_text):
-            in_stock = get_digit_groups(in_stock_text)[0]
+        in_stock_text = clean_str(soup.find(id="availability").text)
+        if 'in stock' in translator.translate(in_stock_text).lower():
+            in_stock = True
         else:
-            in_stock = 'Yes'
-    elif soup.find(id="availability-string"):
-        in_stock = 'Yes' if 'In Stock' in soup.find(id="availability-string").text.strip() else 'No'
-    else:
-        in_stock = 'No'
-    details['in_stock'] = in_stock
+            in_stock = False
 
+    elif soup.find(id="availability-string"):
+        in_stock_text = clean_str(soup.find(id="availability-string").text)
+
+        in_stock = True if 'in stock' in translator.translate(in_stock_text).lower() else False
+    else:
+        in_stock = False
+        in_stock_text = ''
+    details['in_stock'] = in_stock
+    details['in_stock_text'] = in_stock_text
+
+    maybe_return_policy = soup.find(id='productSupportAndReturnPolicy-return-policy-celWidget')
+    if maybe_return_policy:
+        details['return_policy'] = clean_str(maybe_return_policy.text)
 
     # subscribeAndSaveDiscountPercentage
     if soup.select_one('#snsDiscountPill  span.pillLightUp'):
@@ -1114,11 +1159,13 @@ def amazon_parser(url,domain,page_html,asin=None):
         'date' : delivery_soup['data-csa-c-delivery-time']
             }
         
-    if soup.find(attrs={'data-csa-c-delivery-price':"fastest"}):
-        if 'Order within' in soup.find(attrs={'data-csa-c-delivery-price':"fastest"}).text.strip():
+    maybe_fastest_delivery = soup.find(id="#mir-layout-DELIVERY_BLOCK-slot-SECONDARY_DELIVERY_MESSAGE_LARGE") or soup.find(attrs={'data-csa-c-delivery-price':"fastest"})
+    if maybe_fastest_delivery:
+        maybe_fastest_delivery = maybe_fastest_delivery.find('span')
+        if 'order within' in translator.translate(maybe_fastest_delivery.text.strip()).lower():
             details['fastest_delivery'] = {
-            'text' : soup.find(attrs={'data-csa-c-delivery-price':"fastest"}).text.strip(),
-            'date' : soup.find(attrs={'data-csa-c-delivery-price':"fastest"})['data-csa-c-delivery-time']
+            'text' : maybe_fastest_delivery.text.strip(),
+            'date' : maybe_fastest_delivery['data-csa-c-delivery-time']
                 }
             
     # Seller Name
@@ -1150,7 +1197,8 @@ def amazon_parser(url,domain,page_html,asin=None):
 
     # is prime  
     details['is_prime'] = True if soup.select('.prime-details') else False
-    details['is_new'] = False if 'Renewed' in details['product_name'] or 'Refurbished' in details['product_name'] else True
+    product_name = translator.translate(details['product_name']).lower()
+    details['is_new'] = False if 'renewed' in product_name or 'refurbished' in product_name else True
     try:
         details['brand_store'] ={
             'id' : details['sub_title']['url'].split('/page/')[-1].split('?')[0],
@@ -1229,6 +1277,11 @@ def amazon_parser(url,domain,page_html,asin=None):
     if releted_product:
         details['releted_product'] = releted_product
 
+    # Review Summary
+    review_summary_soup = soup.find(id="product-summary")
+    if review_summary_soup:
+        details['review_summary'] = clean_str(review_summary_soup.text.replace('Customers say',''))
+
     # Top reviews
     top_reviews = get_reviews_info(soup)
     if top_reviews:
@@ -1252,17 +1305,24 @@ def get_top_review_details(review_soup):
         
         review_date_soup = review_soup.select_one('span.review-date')
         if review_date_soup:
+            review_date_soup_text = review_date_soup.text
+            if 'Reviewed in' not in review_date_soup_text:
+                review_date_soup_text = translator.translate(review_date_soup_text)
+
             review['date'] ={
-                "raw" : clean_str(review_date_soup.text),
+                "raw" : clean_str(review_date_soup),
             }
             for date_formats in POSSIBLE_DATE_FORMAT:
                 try:
-                    review["date"] = datetime.strptime(review_date_soup.text.split('on')[1].strip(), date_formats).strftime('%Y-%m-%d')
+                    review["date"] = datetime.strptime(review_date_soup.split('on')[1].strip(), date_formats).strftime('%Y-%m-%d')
                 except:
                     pass
 
-            review['review_country'] = review_date_soup.text.split('Reviewed in')[1].split('on')[0].strip().strip('the ')
-            
+            if 'Reviewed in' in review_date_soup_text:
+                review['review_country'] = review_date_soup_text.split('Reviewed in')[1].split(' on ')[0].strip().strip('the ')
+            elif 'left in' in review_date_soup_text:
+                review['review_country'] = review_date_soup_text.split('left in')[1].split(' on ')[0].strip().strip('the ')
+
         if review_soup.find('div',attrs={"data-hook":"genome-widget"}):
             review['profile'] = {
                 'name':clean_str(review_soup.select_one("div[data-hook='genome-widget'] span.a-profile-name").text),
@@ -1328,4 +1388,3 @@ def amazon_review_parser(html,domain):
             review_info['previos_page_link'] = previos_page_link['href']
 
         return review_info
-   
