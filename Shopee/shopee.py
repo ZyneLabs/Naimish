@@ -1,4 +1,6 @@
+import json
 from datetime import datetime
+
 
 def shopee_parser(product_json: dict) -> dict:
     
@@ -55,8 +57,8 @@ def shopee_parser(product_json: dict) -> dict:
     if product_json.get('product_images',{}).get('images'):
         details['images'] = [base_image_url+image for image in product_json['product_images']['images']]
 
-    if product_json.get('product_images',{}).get('video'):
-        details['video'] = [base_image_url+image for image in product_json['product_images']['video']]
+    if product_json.get('product_images',{}).get('video',{}).get('mms_data'):
+        details['video'] = json.loads(product_json['product_images']['video']['mms_data'])['default_format']['url']
 
     if product_json['item'].get('size_chart'):
         details['size_chart'] = base_image_url+product_json['item']['size_chart']
