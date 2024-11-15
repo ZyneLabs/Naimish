@@ -1,6 +1,13 @@
 from common import *
 from urllib.parse import unquote
-from googletrans import Translator, constants
+
+try:
+    import json_repair
+except ModuleNotFoundError:
+    print("json_repair module not found. Please run 'pip install json-repair' to install it.")
+    exit(1)
+    
+# from googletrans import Translator, constants
 try:
     from deep_translator import GoogleTranslator
     translator = GoogleTranslator()
@@ -292,13 +299,10 @@ def get_variations(soup):
     variations_info = {}
     if soup.find('script',string=re.compile('dataToReturn')):
         varaition_text = search_text_between(soup.find('script',string=re.compile('dataToReturn')).text,'dataToReturn = ',';')
-        varaition_text = re.sub(r'(?<!\\)\\(?![ntr"])', r'\\\\', varaition_text)
         if not varaition_text:
             return {}
         
-        variations_detail = json.loads(varaition_text.replace(''',
-                ]''',']').replace(',]',']'),strict=False)
-        
+        variations_detail = json_repair.repair_json(varaition_text, return_objects=True)
         if not variations_detail.get('dimensionValuesDisplayData',''):
             return {}
        
@@ -313,12 +317,10 @@ def get_variations(soup):
         variations_info['current_selection'] =' | '.join([ f'{variations_detail["variationDisplayLabels"][k]} : {v}' for k,v in variations_detail['selected_variations'].items()])
     
     if soup.select_one('#imageBlockVariations_feature_div script'):
-        variation_text = search_text_between(soup.select_one('#imageBlockVariations_feature_div script').text,"jQuery.parseJSON('","');")
+        variation_text = search_text_between(soup.select_one('#imageBlockVariations_feature_div script').text,"jQuery.parseJSON('","')")
         variants = []
-        variation_text = re.sub(r'(?<!\\)\\(?![ntr"])', r'\\\\', variation_text)
-
         if  variation_text:
-            image_variation_json = json.loads(variation_text,strict=False)
+            image_variation_json = json_repair.repair_json(variation_text, return_objects=True)
             color_to_asin = image_variation_json['colorToAsin']
 
             for name,values in image_variation_json['colorImages'].items():
@@ -739,7 +741,12 @@ def amazon_parser(url,domain,page_html,asin=None):
         if not a['href'].startswith('http'):
             a['href'] = 'https://'+domain+a['href']
 
-    
+    if location_soup := soup.select_one('#glow-ingress-block'):
+        details['location_text'] = {
+            'zip_Code': clean_str(location_soup.select_one('#glow-ingress-line1').text),
+            'city': clean_str(location_soup.select_one('#glow-ingress-line2').text),
+        }
+   
     maybe_search_alias = soup.select_one('form#nav-search-bar-form option[selected]')
     if maybe_search_alias:
         details['search_alias'] = {
@@ -931,7 +938,7 @@ def amazon_parser(url,domain,page_html,asin=None):
             details['variant_asins'] = ','.join(variants)
 
     # Color of Variant
-    if soup.find(id="variation_color_name"):
+    if soup.find(id="variation_color_name") and soup.find(id="variation_color_name").find('span',class_='selection'):
         details['color_variant']  = soup.find(id="variation_color_name").find('span',class_='selection').text.strip()
       
     if soup.find(id="legal_feature_div"):
@@ -1388,3 +1395,4 @@ def amazon_review_parser(html,domain):
             review_info['previos_page_link'] = previos_page_link['href']
 
         return review_info
+    

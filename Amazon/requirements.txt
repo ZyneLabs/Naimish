@@ -5,3 +5,4 @@ pymongo
 redis
 rq
 jsbeautifier
+json_repair
