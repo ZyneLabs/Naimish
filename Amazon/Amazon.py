@@ -301,8 +301,12 @@ def get_variations(soup):
         varaition_text = search_text_between(soup.find('script',string=re.compile('dataToReturn')).text,'dataToReturn = ',';')
         if not varaition_text:
             return {}
-        
-        variations_detail = json_repair.repair_json(varaition_text, return_objects=True)
+        try:
+            varaition_text = re.sub(r'(?<!\\)\\(?![ntr"])', r'\\\\', varaition_text)
+            variations_detail = json.loads(varaition_text.replace(''',
+                ]''',']').replace(',]',']'),strict=False)
+        except:
+            variations_detail = json_repair.repair_json(varaition_text, return_objects=True)
         if not variations_detail.get('dimensionValuesDisplayData',''):
             return {}
        
@@ -658,10 +662,13 @@ def get_used_product_offer(soup):
             product['price'] = clean_str(maybe_used_product_soup.select_one('.reinventPriceAccordionT2 [aria-hidden]').text)
         
         maybe_delivery_soup = maybe_used_product_soup.select_one('#usedAccordionRow #mir-layout-DELIVERY_BLOCK-slot-PRIMARY_DELIVERY_MESSAGE_MEDIUM span')
+       
         if maybe_delivery_soup:
-            product['delivery_fee'] = maybe_delivery_soup['data-csa-c-delivery-price']
-            product['delivery_date'] = maybe_delivery_soup['data-csa-c-delivery-time']
-        
+            if maybe_delivery_soup.get('data-csa-c-delivery-price'):
+                product['delivery_fee'] = maybe_delivery_soup['data-csa-c-delivery-price']
+            if maybe_delivery_soup.get('data-csa-c-delivery-time'):
+                product['delivery_date'] = maybe_delivery_soup['data-csa-c-delivery-time']
+
         for row in soup.select('#shipFromSoldByAbbreviated_feature_div div.a-row'):
             spans = row.find_all('span')
             product[clean_str(spans[0].text).replace(' ','_').lower()] = spans[1].text
@@ -810,7 +817,7 @@ def amazon_parser(url,domain,page_html,asin=None):
     maybe_format = soup.select_one('#tmmSwatches .selected span.slot-title')
     if maybe_format:
         details['format'] = maybe_format.text.strip()
-    elif soup.find('span',string=re.compile('Format:')):
+    elif soup.find('span',string=re.compile('Format:')) and soup.find('span',string=re.compile('Format:')).find_next_sibling('span'):
         details['format'] = soup.find('span',string=re.compile('Format:')).find_next_sibling('span').text
 
     maybe_audio_sample = soup.select_one('div[data-audioid="audImgSample"]')
@@ -1007,9 +1014,9 @@ def amazon_parser(url,domain,page_html,asin=None):
         details['bundle_contents'] = get_bundle_contents(soup)
 
     #feature_bullets
-    if soup.find(id="productFactsDesktopExpander"):
+    if soup.find(id="productFactsDesktopExpander") and soup.find('h3',string=re.compile('About this item')) and soup.find('h3',string=re.compile('About this item')).find_next_siblings('ul',class_="a-unordered-list a-vertical a-spacing-small"):
         details['feature_bullets'] = clean_str(' | '.join([i.text.strip() for i in soup.find('h3',string=re.compile('About this item')).find_next_siblings('ul',class_="a-unordered-list a-vertical a-spacing-small")]))
-    elif soup.find(id="featurebullets_feature_div"):
+    elif soup.find(id="featurebullets_feature_div") :
         details['feature_bullets'] =clean_str(' | '.join([i.text.strip() for i in soup.select('div#featurebullets_feature_div ul li')]))
     
     if soup.find(id="variation_size_name"):
@@ -1101,7 +1108,7 @@ def amazon_parser(url,domain,page_html,asin=None):
         details['technical_info'] = tech_info
     
     # book_description
-    if soup.select('#bookDescription_feature_div'):
+    if soup.select('#bookDescription_feature_div') and soup.select_one('div[data-a-expander-name="book_description_expander"]'):
         details['book_description'] = clean_str(soup.select_one('div[data-a-expander-name="book_description_expander"]').text)
 
     # legal_features
@@ -1160,12 +1167,15 @@ def amazon_parser(url,domain,page_html,asin=None):
 
     if soup.find(id="mir-layout-DELIVERY_BLOCK-slot-PRIMARY_DELIVERY_MESSAGE_LARGE"):
         delivery_soup =soup.find(id="mir-layout-DELIVERY_BLOCK-slot-PRIMARY_DELIVERY_MESSAGE_LARGE").find('span')
-
-        details['standard_delivery'] = {
-        'price' : delivery_soup['data-csa-c-delivery-price'],
-        'date' : delivery_soup['data-csa-c-delivery-time']
+        if 'a-color-error' not in delivery_soup.get('class',''):
+            details['standard_delivery'] = {
+            'price' : delivery_soup['data-csa-c-delivery-price'],
+            'date' : delivery_soup['data-csa-c-delivery-time']
+                }
+        else:
+            details['standard_delivery'] = {
+                'text' : delivery_soup.text.strip(),
             }
-        
     maybe_fastest_delivery = soup.find(id="#mir-layout-DELIVERY_BLOCK-slot-SECONDARY_DELIVERY_MESSAGE_LARGE") or soup.find(attrs={'data-csa-c-delivery-price':"fastest"})
     if maybe_fastest_delivery:
         maybe_fastest_delivery = maybe_fastest_delivery.find('span')
