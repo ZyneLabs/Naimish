@@ -3,7 +3,7 @@ import re
 import json
 import requests
 import os
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus,urlparse
 
 try:
     from deep_translator import GoogleTranslator
@@ -45,7 +45,7 @@ def clean_str(input_str, sep="|"):
     return input_str.strip()
 
 
-def mouser_parser(html:str):
+def mouser_parser(html:str,domain : str):
     soup = BeautifulSoup(html, 'html.parser')
     details  = {}
     try:
@@ -237,10 +237,10 @@ def mouser_parser(html:str):
                 
                 if not maybe_product_name:continue
                 product = {
-                    'URL': 'https://mouser.com' + item.get('href'),
+                    'URL': 'https://'+domain+ item.get('href'),
                     'Product_Name': clean_str(maybe_product_name.text),
                     'Description': clean_str(item.select_one('.pdp-newest-products-link-text').text),
-                    'Image': 'https://mouser.com' + item.select_one('img').get('src')
+                    'Image': 'https://'+domain+ item.select_one('img').get('src')
                 }
 
                 products.append(product)
@@ -294,17 +294,20 @@ def mouser(url):
         return None
     
     html = req.text
-    data,pid = mouser_parser(html)
+
+    domain = urlparse(url).netloc
+
+    data,pid = mouser_parser(html,domain)
     if data.get('Environment_Documents') and data.get('Environment_Documents') !='none' and  not data.get('Environment_Documents').startswith('https'):
         # this is not working we need to check this
         print(data.get('Environment_Documents'))
-        environment_doc_url = f'https://www.mouser.com/Product/Product/GetEnvironmentalDocs?objectId={data.get("Environment_Documents")}'
+        environment_doc_url = f'https://{domain}/Product/Product/GetEnvironmentalDocs?objectId={data.get("Environment_Documents")}'
         response = mouser_scraper(environment_doc_url,method='POST')
         environment_doc = environment_doc_parser(response.text)
         data['Environment_Documents'] = environment_doc
     
     if pid:
-        also_bought_url =f'https://www.mouser.com/Product/GetCustomersAlsoBoughtProducts?qs={quote_plus(pid)}'
+        also_bought_url =f'https://{domain}/Product/GetCustomersAlsoBoughtProducts?qs={quote_plus(pid)}'
         print('Also_bought_url: ', also_bought_url)
         response = mouser_scraper(also_bought_url)
         also_bought_products = also_bought_parser(response.json())
