@@ -1,8 +1,7 @@
 import json
 from datetime import datetime
 
-
-def shopee_parser(product_json: dict) -> dict:
+def shopee_parser(domain: str, product_json: dict) -> dict:
     
     if not product_json.get('data') and not product_json.get('error'):
         return {
@@ -15,11 +14,15 @@ def shopee_parser(product_json: dict) -> dict:
 
     details['item_id'] = product_json['item']['item_id']
     details['name'] = product_json['item']['title']
-    details['url'] = f"/product-i.{product_json['item']['shop_id']}.{product_json['item']['item_id']}"
+    details['url'] = f"https://{domain}/product-i.{product_json['item']['shop_id']}.{product_json['item']['item_id']}"
 
     # price info
     if product_json['item'].get('currency'):
         details['currency'] = product_json['item']['currency']
+
+    # Brand
+    if product_json['item'].get('brand'):
+        details['brand'] = product_json['item']['brand']
 
     if product_json['item'].get('price'):
         price_info = {'price': product_json['item']['price'],}
@@ -56,18 +59,27 @@ def shopee_parser(product_json: dict) -> dict:
    
     if product_json.get('product_images',{}).get('images'):
         details['images'] = [base_image_url+image for image in product_json['product_images']['images']]
-
-    if product_json.get('product_images',{}).get('video',{}).get('mms_data'):
+        
+    if product_json.get('product_images',{}).get('video') and product_json['product_images']['video'].get('mms_data'):
         details['video'] = json.loads(product_json['product_images']['video']['mms_data'])['default_format']['url']
 
     if product_json['item'].get('size_chart'):
         details['size_chart'] = base_image_url+product_json['item']['size_chart']
+    
     if product_json.get('product_attributes',{}).get('categories'):
         detailed_category_info = [
             {'catid': category['catid'], 'name': category['display_name']}
             for category in product_json['product_attributes']['categories']
         ]
         details['category_path'] = ' > '.join([category['name'] for category in detailed_category_info]) + ' > '+ product_json['item']['title']
+        
+        if len(detailed_category_info) >=1:
+            details['category_1'] = detailed_category_info[0]['name']
+        if len(detailed_category_info) >=2:
+            details['category_2'] = detailed_category_info[1]['name']
+        if len(detailed_category_info) >=3:
+            details['category_3'] = detailed_category_info[2]['name']
+
         details['detailed_category_info'] = detailed_category_info
 
     if product_json.get('product_attributes',{}).get('attrs'):
@@ -96,7 +108,7 @@ def shopee_parser(product_json: dict) -> dict:
                 'item_id': model['item_id'],
                 'name': model['name'],
                 'price':model['price'],
-                'url': f"/product-i.{product_json['item']['shop_id']}.{model['item_id']}",
+                'url': f"https://{domain}/product-i.{product_json['item']['shop_id']}.{model['item_id']}",
             }
             for model in product_json['item']['models']
         ]
