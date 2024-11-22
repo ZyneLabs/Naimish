@@ -260,7 +260,6 @@ def mouser_parser(html:str,domain : str):
         return details, pid
     except Exception as e:
         return {'URL': url, 'Error': str(e)}, None
-# also_bought_url =f'https://www.mouser.com/Product/GetCustomersAlsoBoughtProducts?qs={pid}'
 
 def also_bought_parser(response):
 
@@ -268,7 +267,7 @@ def also_bought_parser(response):
         return []
     
     products = []
-    for item in response['customersAlsoBoughtProducts']:
+    for item in response.get('customersAlsoBoughtProducts'):
         product = {
             'URL': item['PdpLink'],
             'PartNumber': item['MouserPartNumber'],
