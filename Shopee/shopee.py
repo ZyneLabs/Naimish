@@ -1,5 +1,18 @@
 import json
 from datetime import datetime
+import re
+
+
+def clean_str(input_str, sep="|"):
+    if input_str is None:
+        return ""
+
+    if type(input_str) is not str:
+        return input_str
+
+    input_str = re.sub(r"\s+", " ", input_str).replace("\n", sep)
+
+    return input_str.strip()
 
 def shopee_parser(domain: str, product_json: dict) -> dict:
     
@@ -58,7 +71,7 @@ def shopee_parser(domain: str, product_json: dict) -> dict:
     details['main_image'] = base_image_url+product_json['item']['image']
    
     if product_json.get('product_images',{}).get('images'):
-        details['images'] = [base_image_url+image for image in product_json['product_images']['images']]
+        details['images'] = ' | '.join([base_image_url+image for image in product_json['product_images']['images']])
         
     if product_json.get('product_images',{}).get('video') and product_json['product_images']['video'].get('mms_data'):
         details['video'] = json.loads(product_json['product_images']['video']['mms_data'])['default_format']['url']
@@ -73,12 +86,11 @@ def shopee_parser(domain: str, product_json: dict) -> dict:
         ]
         details['category_path'] = ' > '.join([category['name'] for category in detailed_category_info]) + ' > '+ product_json['item']['title']
         
-        if len(detailed_category_info) >=1:
-            details['category_1'] = detailed_category_info[0]['name']
-        if len(detailed_category_info) >=2:
-            details['category_2'] = detailed_category_info[1]['name']
-        if len(detailed_category_info) >=3:
-            details['category_3'] = detailed_category_info[2]['name']
+        for i in range(len(detailed_category_info)):
+            details[f'category_{i+1}'] = detailed_category_info[i]['name']
+            
+            if i == 2:
+                break
 
         details['detailed_category_info'] = detailed_category_info
 
@@ -88,7 +100,7 @@ def shopee_parser(domain: str, product_json: dict) -> dict:
         }
 
     if product_json['item'].get('description'):
-        details['description'] = product_json['item']['description']
+        details['description'] =clean_str(product_json['item']['description'])
 
     if product_json['item'].get('rich_text_description',{}) and product_json['item']['rich_text_description'].get('paragraph_list'):
         details['description_images'] = [base_image_url+image.get('img_id') for image in product_json['item']['rich_text_description']['paragraph_list'] if image.get('img_id')]
