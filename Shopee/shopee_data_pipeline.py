@@ -33,7 +33,6 @@ warehouse_db_config = {
     'password': db_password,
     'port': 5432
 }
-print(warehouse_db_config)
 
 cache_db_config = {
     'host': db_host,
@@ -122,7 +121,6 @@ def process_row(connection, cursor,row):
     try:
         if '"message":""' not in row[1]:    
             data  =  shopee_parser(row[0], json.loads(row[1]))
-            print(data)
             save_product_data(connection, cursor, data)
         return 1
     
