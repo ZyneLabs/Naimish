@@ -4,21 +4,38 @@ from common import send_req_syphoon,findall_text_between,clean_str,MokeRequest
 import requests
 import json
 import jsbeautifier
+import os
+from datetime import datetime
     
-def walmart_scraper(product_url,max_try=3):
-    while max_try:
+ 
+def walmart_scraper(url,filename:str=None):
+    if filename:
+        # kepping html for a day
+        date = datetime.now().strftime("%Y%m%d")
+        os.makedirs(date,exist_ok=True)
+        
         try:
-            req = send_req_syphoon(0, 'get', product_url)
-            req.raise_for_status()
-            return req
-        except requests.exceptions.RequestException:
-            max_try -= 1
-
-        except Exception as e:
-            req = MokeRequest(400,{"message":"This request will not charge you"})
-
+            with open(f'{date}/{filename}.html','r',encoding='utf-8') as f:
+                html = f.read()
+                req = MokeRequest(status_code=200,text=html)
+        except:
+            try:
+                req = send_req_syphoon(0,'get',url)
+                # req.raise_for_status()
+                html = req.text
+                with open(f'{date}/{filename}.html','w',encoding='utf-8') as f:
+                    f.write(html)
+            except Exception as ex:
+                return {'message':f'Error in sending request {url}'}
+    else:
+        try:
+            req = send_req_syphoon(0,'get',url)
+            # req.raise_for_status()
+            # html = req.text
+        except Exception as ex:
+            return {'message':f'Error in sending request {url}'}
+        
     return req
-
 
 def get_variant_details(product_json,details):
     
@@ -66,7 +83,7 @@ def get_review_details(review_json):
         return review_info
 
 def get_reviews(reviews_json):
-    if reviews_json:
+    if reviews_json and reviews_json['roundedAverageOverallRating']:
         reviews_info = {}
         reviews_info['average_rating'] = reviews_json['roundedAverageOverallRating']
         reviews_info['rating_breakdown'] = [
@@ -95,7 +112,7 @@ def get_reviews(reviews_json):
             reviews_info['top_reviews'] = [get_review_details(review) for review in reviews_json['customerReviews']]
 
         return reviews_info
-
+    return {}
 def get_variants(product_json):
     if product_json['product'].get('variantCriteria',''):
         variants = []
@@ -131,9 +148,8 @@ def get_variants(product_json):
         if available_variants:
             return {'variants': variants, 'current_selection': current_selection, 'available_variants': available_variants}
 
-def walmert_parser(product_url,html):
+def walmart_parser(product_url,html):
     soup = BeautifulSoup(html, "html.parser")
-
     if not soup.find('script',id="__NEXT_DATA__"):
             return {"message": f"Product Not Found from {product_url}"}
     
@@ -158,19 +174,28 @@ def walmert_parser(product_url,html):
         }
 
     product  = {}
-
+    product['url'] = soup.find('link',rel="canonical")['href']
     product['us_item_id'] = product_json['product']['usItemId']
     product['product_id'] = product_json['product']['id']
     product['title']  = product_json['product']['name']
     product['upc'] = product_json['product'].get('upc','')
     product['condition_type'] = product_json['product'].get('conditionType') or 'New'
     product['short_description_html'] = product_json['product'].get('shortDescription','')
+    product['short_description_text'] = clean_str(BeautifulSoup(product_json['product'].get('shortDescription',''), "html.parser").text)
     product['long_description_html'] = product_json['idml'].get('longDescription','')
+    product['long_description_text'] = clean_str(' | '.join([li.text for li in BeautifulSoup(product_json['idml'].get('longDescription',''), "html.parser").find_all('li')]))
 
 
     # categories
     try:
         product['categories'] = product_json['product']['category']['path']
+       
+        start_index = 1 if product['categories'] and product['categories'][0].get('name') == 'Home' else 0
+        for idx in range(3):
+            category_index = start_index + idx
+            if category_index < len(product['categories']):
+                product[f'category_{idx + 1}'] = product['categories'][category_index].get('name', '')
+                
     except:
         pass
     
@@ -191,6 +216,9 @@ def walmert_parser(product_url,html):
 
     if product_json['idml'].get('ingredients'):
         product['ingredients'] =[ product_json['idml']['ingredients'][indgredient] for indgredient in product_json['idml']['ingredients'] if product_json['idml']['ingredients'][indgredient]]
+
+    if product_json['idml'].get('nutritionFacts') and any(product_json['idml']['nutritionFacts'].values()):
+        product['nutrition_facts'] = product_json['idml']['nutritionFacts']
 
     if product_json['idml'].get('warnings'):
         product['warnings'] = product_json['idml']['warnings']
@@ -419,3 +447,10 @@ def get_seller_offer(item_number,hash):
 
     req = send_req_syphoon(2,'get',f'https://www.walmart.com/orchestra/home/graphql/GetAllSellerOffers/{hash}',params=params,payload=payload)
     return req.json()
+
+if __name__ == '__main__':
+    from rich.pretty import pprint
+    with open('disc_product.html','r') as f:
+        html = f.read()
+    details = walmart_parser('https://www.walmart.com/ip/Great-Value-Milk-Whole-Vitamin-D-Gallon-Plastic-Jug/10450114',html)
+    pprint(details)
