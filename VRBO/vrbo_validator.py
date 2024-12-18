@@ -15,23 +15,7 @@ def validate_response(response_json : dict | list) -> bool:
         ):
             return True
 
-        if response_json.get('errors') or response.get('message'):
+        if response_json.get('errors') or response_json.get('message'):
             return False
         
     return False
-
-
-import os
-import json
-from rich import print
-files = os.listdir("output")
-invalid = []
-for file in files:
-    with open(f"output/{file}", "r") as f:
-        response = json.load(f)
-        if not validate_response(response):
-            invalid.append(file)
-
-print(invalid)
-print(f"Total number of invalid requests: {len(invalid)}")
-
