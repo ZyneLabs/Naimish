@@ -84,7 +84,8 @@ def get_restaurant_info(response_json: dict):
     data['reviews'] = restaurant_json['SECTION_BASIC_INFO']['rating']['votes']
 
     # Price range/ Ticket size
-    data['price_range'] = restaurant_json['SECTION_RES_DETAILS']['CFT_DETAILS']['cost_text_min_info']
+    if cfts:= restaurant_json['SECTION_RES_DETAILS']['CFT_DETAILS'].get('cfts'):
+        data['price_range'] = [ cft['title'] for cft in cfts]
 
     # operational status: Open/Permanently closed
     data['status'] = restaurant_json['SECTION_BASIC_INFO']['res_status_text']
@@ -130,6 +131,8 @@ def get_restaurant_info(response_json: dict):
 
     # Facilties : Not found
 
+    if restaurant_json['SECTION_RES_DETAILS'].get('HIGHLIGHTS') and restaurant_json['SECTION_RES_DETAILS']['HIGHLIGHTS'].get('highlights'):
+        data['highlights'] = [highlight['text'] for highlight in restaurant_json['SECTION_RES_DETAILS']['HIGHLIGHTS']['highlights']]
     # Restaurant photo
 
     if restaurant_json['SECTION_IMAGE_CAROUSEL'].get('entities'):
@@ -200,7 +203,7 @@ def zomato(url: str, menu=False, online_order=False):
     credit_count = 1
     zomato_data = {}
 
-    if url.split('/')[-1] in ['menu', 'order', 'info', 'book', 'reviews', 'photos']:
+    if url.split('/')[-1] in ('menu', 'order', 'info', 'book', 'reviews', 'photos'):
         url = '/'.join(url.split('/')[:-1])
 
     if html := zomato_scraper(url):
