@@ -83,6 +83,20 @@ def get_restaurant_info(response_json: dict):
     # Number of Reviews
     data['reviews'] = restaurant_json['SECTION_BASIC_INFO']['rating']['votes']
 
+    if restaurant_json['SECTION_BASIC_INFO'].get('rating_new') and restaurant_json['SECTION_BASIC_INFO']['rating_new'].get('ratings'):
+        data['ratings'] = {}
+        if dining_rating := restaurant_json['SECTION_BASIC_INFO']['rating_new']['ratings'].get('DINING'):
+            data['ratings']['dining'] = {
+                'rating': dining_rating['rating'],
+                'review_count': dining_rating['reviewCount']
+            }
+        if delivery_rating := restaurant_json['SECTION_BASIC_INFO']['rating_new']['ratings'].get('DELIVERY'):
+            data['ratings']['delivery'] = {
+                'rating': delivery_rating['rating'],
+                'review_count': delivery_rating['reviewCount']
+            }
+
+
     # Price range/ Ticket size
     if cfts:= restaurant_json['SECTION_RES_DETAILS']['CFT_DETAILS'].get('cfts'):
         data['price_range'] = [ cft['title'] for cft in cfts]
@@ -126,8 +140,8 @@ def get_restaurant_info(response_json: dict):
                 data['events'].append(event_data)
 
     # People Say This Place Is Known For
-    if restaurant_json['SECTION_RES_DETAILS'].get('KNOWN_FOR'):
-        data['known_for'] = restaurant_json['SECTION_RES_DETAILS']['KNOWN_FOR']['knownFor']
+    if restaurant_json['SECTION_RES_DETAILS'].get('PEOPLE_LIKED'):
+        data['known_for'] = restaurant_json['SECTION_RES_DETAILS']['PEOPLE_LIKED']['description']
 
     # Facilties : Not found
 
@@ -201,7 +215,7 @@ def get_order_details(response_json: dict):
 def zomato(url: str, menu=False, online_order=False):
 
     credit_count = 1
-    zomato_data = {}
+    zomato_data = {'zomato_url': url}
 
     if url.split('/')[-1] in ('menu', 'order', 'info', 'book', 'reviews', 'photos'):
         url = '/'.join(url.split('/')[:-1])
@@ -212,7 +226,7 @@ def zomato(url: str, menu=False, online_order=False):
         return None
 
     if response_json := load_json_from_js(soup):
-        zomato_data = get_restaurant_info(response_json)
+        zomato_data |= get_restaurant_info(response_json)
 
         if menu:
             credit_count += 1
