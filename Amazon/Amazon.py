@@ -85,6 +85,7 @@ def amazon_scraper(url, domain:str, custom_cookies:str=None ,filename:str=None):
                 with open(f'{date}/{filename}.html','w',encoding='utf-8') as f:
                     f.write(html)
             except Exception as ex:
+                print(ex)
                 return {'message':f'Error in sending request {url}'}
     else:
         try:
@@ -111,7 +112,7 @@ def get_asin(url):
 
 def get_reviews_info(soup):
     reviews = []
-    for review_soup in soup.select('div[data-hook="review"].a-section.review.aok-relative'):
+    for review_soup in soup.select('[data-hook="review"].review.aok-relative'):
         try:
             if review_soup.find('a',attrs={"data-hook":"review-title"}) or review_soup.find('span',attrs={"data-hook":"review-title"}):
                 review = {}
@@ -256,7 +257,7 @@ def get_also_bought(soup,selector):
         try:
             product = {}
             product['asin'] = get_asin(item.select_one('a.a-link-normal')['href'])
-            product['title'] = item.select_one('a.a-link-normal div[aria-hidden="true"]').text.strip()
+            product['title'] = item.select_one('a.a-link-normal')['href'].get('title') if item.select_one('a.a-link-normal')['href'].get('title') else item.select_one('a.a-link-normal div[aria-hidden="true"]:not(:has(img))').text.strip()
             product['link'] = item.select_one('a.a-link-normal')['href']
             product['image'] = item.select_one('a img')['src']
             if item.select_one('span.a-price span.a-offscreen'):
@@ -297,49 +298,52 @@ def get_shop_by_look(soup):
 
 def get_variations(soup):
     variations_info = {}
-    if soup.find('script',string=re.compile('dataToReturn')):
-        varaition_text = search_text_between(soup.find('script',string=re.compile('dataToReturn')).text,'dataToReturn = ',';')
-        if not varaition_text:
-            return {}
-        try:
-            varaition_text = re.sub(r'(?<!\\)\\(?![ntr"])', r'\\\\', varaition_text)
-            variations_detail = json.loads(varaition_text.replace(''',
-                ]''',']').replace(',]',']'),strict=False)
-        except:
-            variations_detail = json_repair.repair_json(varaition_text, return_objects=True)
-        if not variations_detail.get('dimensionValuesDisplayData',''):
-            return {}
-       
-        avilable_variations = variations_detail['dimensionValuesDisplayData']
+    try:
+        if soup.find('script',string=re.compile('dataToReturn')):
+            varaition_text = search_text_between(soup.find('script',string=re.compile('dataToReturn')).text,'dataToReturn = ',';')
+            if not varaition_text:
+                return {}
+            try:
+                varaition_text = re.sub(r'(?<!\\)\\(?![ntr"])', r'\\\\', varaition_text)
+                variations_detail = json.loads(varaition_text.replace(''',
+                    ]''',']').replace(',]',']'),strict=False)
+            except:
+                variations_detail = json_repair.repair_json(varaition_text, return_objects=True)
+            if not variations_detail.get('dimensionValuesDisplayData',''):
+                return {}
+        
+            avilable_variations = variations_detail['dimensionValuesDisplayData']
 
-        if len(avilable_variations)<=1:
-            return {}
+            if len(avilable_variations)<=1:
+                return {}
 
-        variations_info['variants'] = ','.join(avilable_variations.keys()) 
-        variations_info['variant_values'] = variations_detail['variationValues']
-        variations_info['color_grouping'] = variations_detail['variationValues'].get('color_name','')
-        variations_info['current_selection'] =' | '.join([ f'{variations_detail["variationDisplayLabels"][k]} : {v}' for k,v in variations_detail['selected_variations'].items()])
-    
-    if soup.select_one('#imageBlockVariations_feature_div script'):
-        variation_text = search_text_between(soup.select_one('#imageBlockVariations_feature_div script').text,"jQuery.parseJSON('","')")
-        variants = []
-        if  variation_text:
-            image_variation_json = json_repair.repair_json(variation_text, return_objects=True)
-            color_to_asin = image_variation_json['colorToAsin']
+            variations_info['variants'] = ','.join(avilable_variations.keys()) 
+            variations_info['variant_values'] = variations_detail['variationValues']
+            variations_info['color_grouping'] = variations_detail['variationValues'].get('color_name','')
+            variations_info['current_selection'] =' | '.join([ f'{variations_detail["variationDisplayLabels"][k]} : {v}' for k,v in variations_detail['selected_variations'].items()])
+        
+        if soup.select_one('#imageBlockVariations_feature_div script'):
+            variation_text = search_text_between(soup.select_one('#imageBlockVariations_feature_div script').text,"jQuery.parseJSON('","')")
+            variants = []
+            if  variation_text:
+                image_variation_json = json_repair.repair_json(variation_text, return_objects=True)
+                color_to_asin = image_variation_json['colorToAsin']
 
-            for name,values in image_variation_json['colorImages'].items():
-                variant= {
-                    "name": name,
-                    'images':[image.get('hiRes') if image.get('hiRes','') else image.get('large') for image in values],
-                    'asin':color_to_asin[name]['asin']
-                }
+                for name,values in image_variation_json['colorImages'].items():
+                    variant= {
+                        "name": name,
+                        'images':[image.get('hiRes') if image.get('hiRes','') else image.get('large') for image in values],
+                        'asin':color_to_asin[name]['asin']
+                    }
 
-                maybe_variant_price = soup.select_one(f'[data-csa-c-item-id="{variant["asin"]}"] .twisterSwatchPrice')
-                if maybe_variant_price:
-                    variant['price'] = clean_str(maybe_variant_price.text)
-                variants.append(variant)
+                    maybe_variant_price = soup.select_one(f'[data-csa-c-item-id="{variant["asin"]}"] .twisterSwatchPrice')
+                    if maybe_variant_price:
+                        variant['price'] = clean_str(maybe_variant_price.text)
+                    variants.append(variant)
 
-        variations_info['variants'] = variants
+            variations_info['variants'] = variants
+    except:
+        ...
     return variations_info
 
 def get_price_info(soup):
@@ -929,9 +933,9 @@ def amazon_parser(url,domain,page_html,asin=None):
     # Variants    
     variation_info = get_variations(soup)
     if variation_info and variation_info.get('variants'):
-        details['variant_values'] = variation_info['variant_values']
-        details['current_selection'] = variation_info['current_selection']
-        details['variants'] =variation_info['variants']
+        details['variant_values'] = variation_info.get('variant_values')
+        details['current_selection'] = variation_info.get('current_selection')
+        details['variants'] =variation_info.get('variants')
     
     maybe_formats= soup.select('#mediamatrix_feature_div span.format  a')
     if maybe_formats:
@@ -1165,42 +1169,48 @@ def amazon_parser(url,domain,page_html,asin=None):
     if soup.select('#dealBadgeSupportingText'):
         details['deal_badge'] = soup.select('#dealBadgeSupportingText')[0].text.strip()
 
-    if soup.find(id="mir-layout-DELIVERY_BLOCK-slot-PRIMARY_DELIVERY_MESSAGE_LARGE"):
-        delivery_soup =soup.find(id="mir-layout-DELIVERY_BLOCK-slot-PRIMARY_DELIVERY_MESSAGE_LARGE").find('span')
-        if 'a-color-error' not in delivery_soup.get('class',''):
-            details['standard_delivery'] = {
-            'price' : delivery_soup['data-csa-c-delivery-price'],
-            'date' : delivery_soup['data-csa-c-delivery-time']
+    try:
+        if soup.find(id="mir-layout-DELIVERY_BLOCK-slot-PRIMARY_DELIVERY_MESSAGE_LARGE"):
+            delivery_soup =soup.find(id="mir-layout-DELIVERY_BLOCK-slot-PRIMARY_DELIVERY_MESSAGE_LARGE").find('span')
+            if 'a-color-error' not in delivery_soup.get('class',''):
+                details['standard_delivery'] = {
+                'price' : delivery_soup['data-csa-c-delivery-price'],
+                'date' : delivery_soup['data-csa-c-delivery-time']
+                    }
+            else:
+                details['standard_delivery'] = {
+                    'text' : delivery_soup.text.strip(),
                 }
-        else:
-            details['standard_delivery'] = {
-                'text' : delivery_soup.text.strip(),
-            }
-    maybe_fastest_delivery = soup.find(id="#mir-layout-DELIVERY_BLOCK-slot-SECONDARY_DELIVERY_MESSAGE_LARGE") or soup.find(attrs={'data-csa-c-delivery-price':"fastest"})
-    if maybe_fastest_delivery:
-        maybe_fastest_delivery = maybe_fastest_delivery.find('span')
-        if 'order within' in translator.translate(maybe_fastest_delivery.text.strip()).lower():
-            details['fastest_delivery'] = {
-            'text' : maybe_fastest_delivery.text.strip(),
-            'date' : maybe_fastest_delivery['data-csa-c-delivery-time']
-                }
-            
-    # Seller Name
+        maybe_fastest_delivery = soup.find(id="#mir-layout-DELIVERY_BLOCK-slot-SECONDARY_DELIVERY_MESSAGE_LARGE") or soup.find(attrs={'data-csa-c-delivery-price':"fastest"})
+        if maybe_fastest_delivery:
+            maybe_fastest_delivery = maybe_fastest_delivery.find('span')
+            if 'order within' in translator.translate(maybe_fastest_delivery.text.strip()).lower():
+                details['fastest_delivery'] = {
+                'text' : maybe_fastest_delivery.text.strip(),
+                'date' : maybe_fastest_delivery['data-csa-c-delivery-time']
+                    }
+    except:
+        ...
+
+    # Seller Name   
     details['is_sold_by_amazon'] = False
-    if soup.find('div',attrs={"tabular-attribute-name":"Sold by"},class_="tabular-buybox-text"):
-        details['seller_info'] = {'name' :  soup.find('div',attrs={"tabular-attribute-name":"Sold by"},class_="tabular-buybox-text").text.strip()}
-       
-        if soup.find('a'):
-            details['seller_info']['link'] = soup.find('a')['href']
-            details['seller_info']['id'] = soup.find('a')['href'].split('seller=')[-1].split('&')[0]
-    
-    elif soup.find(id="sellerProfileTriggerId"):
-        details['seller_info'] = {'name' :soup.find(id="sellerProfileTriggerId").text.strip()}
-        if soup.find(id="sellerProfileTriggerId").get('href',''):
-            details['seller_info']['link'] = soup.find(id="sellerProfileTriggerId").get('href')
-            details['seller_info']['id'] = soup.find(id="sellerProfileTriggerId").get('href').split('seller=')[-1].split('&')[0]
-    else:
-        details['is_sold_by_amazon'] = True
+    try:
+        if soup.find('div',attrs={"tabular-attribute-name":"Sold by"},class_="tabular-buybox-text"):
+            details['seller_info'] = {'name' :  soup.find('div',attrs={"tabular-attribute-name":"Sold by"},class_="tabular-buybox-text").text.strip()}
+        
+            if soup.find('a'):
+                details['seller_info']['link'] = soup.find('a')['href']
+                details['seller_info']['id'] = soup.find('a')['href'].split('seller=')[-1].split('&')[0]
+        
+        elif soup.find(id="sellerProfileTriggerId"):
+            details['seller_info'] = {'name' :soup.find(id="sellerProfileTriggerId").text.strip()}
+            if soup.find(id="sellerProfileTriggerId").get('href',''):
+                details['seller_info']['link'] = soup.find(id="sellerProfileTriggerId").get('href')
+                details['seller_info']['id'] = soup.find(id="sellerProfileTriggerId").get('href').split('seller=')[-1].split('&')[0]
+        else:
+            details['is_sold_by_amazon'] = True
+    except:
+        ...
 
     # used_product
     used_product_offer = get_used_product_offer(soup)
