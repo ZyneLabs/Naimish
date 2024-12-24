@@ -1,19 +1,6 @@
 from common import *
 from urllib.parse import unquote
-
-try:
-    import json_repair
-except ModuleNotFoundError:
-    print("json_repair module not found. Please run 'pip install json-repair' to install it.")
-    exit(1)
-    
-# from googletrans import Translator, constants
-try:
-    from deep_translator import GoogleTranslator
-    translator = GoogleTranslator()
-except ModuleNotFoundError:
-    print("Deep Translator module not found. Please run 'pip install deep-translator' to install it.")
-    exit(1)
+import ast
 
 # from Amazon_seller import get_other_sellers
 
@@ -149,8 +136,8 @@ def get_reviews_info(soup):
                     review['date'] ={
                         "raw" : clean_str(review_date_soup_text),
                     }
-                    if 'Reviewed in' not in review_date_soup_text:
-                        review_date_soup_text = translator.translate(review_date_soup_text)
+                    # if 'Reviewed in' not in review_date_soup_text:
+                    #     review_date_soup_text = translator.translate(review_date_soup_text)
 
                     for date_formats in POSSIBLE_DATE_FORMAT:
                         try:
@@ -300,15 +287,15 @@ def get_variations(soup):
     variations_info = {}
     try:
         if soup.find('script',string=re.compile('dataToReturn')):
-            varaition_text = search_text_between(soup.find('script',string=re.compile('dataToReturn')).text,'dataToReturn = ',';')
-            if not varaition_text:
+            variation_text = search_text_between(soup.find('script',string=re.compile('dataToReturn')).text,'dataToReturn = ',';')
+            if not variation_text:
                 return {}
             try:
-                varaition_text = re.sub(r'(?<!\\)\\(?![ntr"])', r'\\\\', varaition_text)
-                variations_detail = json.loads(varaition_text.replace(''',
+                variation_text = re.sub(r'(?<!\\)\\(?![ntr"])', r'\\\\', variation_text)
+                variations_detail = json.loads(variation_text.replace(''',
                     ]''',']').replace(',]',']'),strict=False)
-            except:
-                variations_detail = json_repair.repair_json(varaition_text, return_objects=True)
+            except Exception as e:
+                variations_detail = ast.literal_eval(variation_text)
             if not variations_detail.get('dimensionValuesDisplayData',''):
                 return {}
         
@@ -326,7 +313,10 @@ def get_variations(soup):
             variation_text = search_text_between(soup.select_one('#imageBlockVariations_feature_div script').text,"jQuery.parseJSON('","')")
             variants = []
             if  variation_text:
-                image_variation_json = json_repair.repair_json(variation_text, return_objects=True)
+                try:
+                    image_variation_json = json.loads(variation_text)
+                except:
+                    image_variation_json = ast.literal_eval(variation_text)
                 color_to_asin = image_variation_json['colorToAsin']
 
                 for name,values in image_variation_json['colorImages'].items():
@@ -734,20 +724,34 @@ def get_rating_info(soup):
     except:
         ...
 
-def amazon_parser(url,domain,page_html,asin=None):
+def amazon_parser(page_html : str) -> dict:
 
+    '''
+    amazon_parser will only require one argument
+    page_html : str
+
+    
+    return : dict
+
+    '''
+    
     details = {}
+    soup = BeautifulSoup(page_html, 'lxml')
+    
+    if url :=soup.select_one('link[rel="canonical"]'):
+        url = url['href']
+    else:
+        return {'message':'No URL found'}
+    domain = get_domain_name(url)
 
-    details['asin'] = get_asin(url) 
+    # making all anchors absolute
+    details['asin'] = asin = get_asin(url) 
     details['url'] = url 
+
 
     parent_asin = search_text_between(page_html,'data-parent-asin="','"')
     if parent_asin:
         details['parent_asin'] = parent_asin
-
-    soup = BeautifulSoup(page_html, 'lxml')
-
-    # making all anchors absolute
     for a in soup.select('a[href]'):
         if not a['href'].startswith('http'):
             a['href'] = 'https://'+domain+a['href']
@@ -1142,7 +1146,9 @@ def amazon_parser(url,domain,page_html,asin=None):
     # Stock Count
     if soup.find(id="availability"):
         in_stock_text = clean_str(soup.find(id="availability").text)
-        if 'in stock' in translator.translate(in_stock_text).lower():
+        # if 'in stock' in translator.translate(in_stock_text).lower():
+        if 'in stock' in in_stock_text.lower():
+
             in_stock = True
         else:
             in_stock = False
@@ -1150,7 +1156,9 @@ def amazon_parser(url,domain,page_html,asin=None):
     elif soup.find(id="availability-string"):
         in_stock_text = clean_str(soup.find(id="availability-string").text)
 
-        in_stock = True if 'in stock' in translator.translate(in_stock_text).lower() else False
+        # in_stock = True if 'in stock' in translator.translate(in_stock_text).lower() else False
+        in_stock = True if 'in stock' in in_stock_text else False
+
     else:
         in_stock = False
         in_stock_text = ''
@@ -1184,7 +1192,9 @@ def amazon_parser(url,domain,page_html,asin=None):
         maybe_fastest_delivery = soup.find(id="#mir-layout-DELIVERY_BLOCK-slot-SECONDARY_DELIVERY_MESSAGE_LARGE") or soup.find(attrs={'data-csa-c-delivery-price':"fastest"})
         if maybe_fastest_delivery:
             maybe_fastest_delivery = maybe_fastest_delivery.find('span')
-            if 'order within' in translator.translate(maybe_fastest_delivery.text.strip()).lower():
+            # if 'order within' in translator.translate(maybe_fastest_delivery.text.strip()).lower():
+            if 'order within' in maybe_fastest_delivery.text.strip().lower():
+
                 details['fastest_delivery'] = {
                 'text' : maybe_fastest_delivery.text.strip(),
                 'date' : maybe_fastest_delivery['data-csa-c-delivery-time']
@@ -1224,7 +1234,9 @@ def amazon_parser(url,domain,page_html,asin=None):
 
     # is prime  
     details['is_prime'] = True if soup.select('.prime-details') else False
-    product_name = translator.translate(details['product_name']).lower()
+    # product_name = translator.translate(details['product_name']).lower()
+    product_name = details['product_name'].lower()
+
     details['is_new'] = False if 'renewed' in product_name or 'refurbished' in product_name else True
     try:
         details['brand_store'] ={
@@ -1316,103 +1328,3 @@ def amazon_parser(url,domain,page_html,asin=None):
 
     return details
 
-def get_top_review_details(review_soup):
-    try:
-        review = {
-            'id' : review_soup.find(id=re.compile('viewpoint-')).get('id').split('-')[-1],
-            'title' : clean_str(review_soup.select_one('span[data-hook="review-title"]').text.strip()),
-            'body' : clean_str(review_soup.select_one('div.a-row.a-spacing-top-mini').text.strip()),
-            'body_html' : review_soup.select_one('div.a-row.a-spacing-top-mini').prettify(),
-        }
-        if review_soup.find('i',attrs={'data-hook':"review-star-rating-view-point"}):
-            review['rating'] = review_soup.find('i',attrs={'data-hook':"review-star-rating-view-point"}).text.split('out')[0].strip()
-        
-        if review_soup.select_one('span.review-votes'):
-            review['helpful_votes'] = review_soup.select_one('span.review-votes').text.split()[0]
-        
-        review_date_soup = review_soup.select_one('span.review-date')
-        if review_date_soup:
-            review_date_soup_text = review_date_soup.text
-            if 'Reviewed in' not in review_date_soup_text:
-                review_date_soup_text = translator.translate(review_date_soup_text)
-
-            review['date'] ={
-                "raw" : clean_str(review_date_soup),
-            }
-            for date_formats in POSSIBLE_DATE_FORMAT:
-                try:
-                    review["date"] = datetime.strptime(review_date_soup.split('on')[1].strip(), date_formats).strftime('%Y-%m-%d')
-                except:
-                    pass
-
-            if 'Reviewed in' in review_date_soup_text:
-                review['review_country'] = review_date_soup_text.split('Reviewed in')[1].split(' on ')[0].strip().strip('the ')
-            elif 'left in' in review_date_soup_text:
-                review['review_country'] = review_date_soup_text.split('left in')[1].split(' on ')[0].strip().strip('the ')
-
-        if review_soup.find('div',attrs={"data-hook":"genome-widget"}):
-            review['profile'] = {
-                'name':clean_str(review_soup.select_one("div[data-hook='genome-widget'] span.a-profile-name").text),
-            }
-            if review_soup.select_one("div[data-hook='genome-widget'] a.a-profile"):
-                review['profile']['link'] = review_soup.select_one("div[data-hook='genome-widget'] a.a-profile")['href']
-                review['profile']['id'] = review_soup.select_one("div[data-hook='genome-widget'] a.a-profile")['href'].split('amzn1.account.')[1].split('/')[0]
-        return review
-    except:
-        ...
-
-def amazon_review_parser(html,domain):
-    soup = BeautifulSoup(html, 'html.parser')
-
-    maybe_product_soup = soup.select_one('div.product-title h1 a')
-    review_info = {}
-    if maybe_product_soup:
-        for a in soup.select('a[href]'):
-                if not a['href'].startswith('http'):
-                    a['href'] = 'https://'+domain+a['href']
-
-        review_info['product'] = {
-            'title':clean_str(maybe_product_soup.text.strip()),
-            'asin': get_asin(maybe_product_soup['href']),
-            'link': maybe_product_soup['href'],
-            'image':soup.select_one('div.product-image img')['src']
-        }
-        
-        sub_title_soup = soup.select_one('#cr-arp-byline')
-        if sub_title_soup:
-            review_info['product']['sub_title'] = {}
-            review_info['product']['sub_title']['text'] =clean_str(sub_title_soup.text)
-            if sub_title_soup.find('a'):
-                review_info['product']['sub_title']['link'] = sub_title_soup.find('a')['href']
-        
-        rating_info = get_rating_info(soup)
-        if rating_info:
-            review_info  = review_info | rating_info
-        
-        review_soup = soup.select_one('div[data-hook="cr-filter-info-review-rating-count"]')
-
-        if review_soup:
-            review_info['total_review_count'] = review_soup.text.split('ratings,')[1].split('with')[0].strip()
-
-        top_positive_review = get_top_review_details(soup.select_one('div.positive-review'))
-        if top_positive_review:
-            review_info['top_positive_review'] = top_positive_review
-
-        top_critical_review = get_top_review_details(soup.select_one('div.critical-review'))
-        if top_critical_review:
-            review_info['top_critical_review'] = top_critical_review
-
-        reviews = get_reviews_info(soup)
-        if reviews:
-            review_info['reviews'] = reviews
-
-        next_page_link = soup.select_one('li.a-last a')
-        if next_page_link:
-            review_info['next_page_link'] = next_page_link['href']
-
-        previos_page_link = soup.select_one('li.a-last').previous_sibling.find('a')
-        if previos_page_link and 'a-disabled' not in previos_page_link.attrs.get('class',[]):
-            review_info['previos_page_link'] = previos_page_link['href']
-
-        return review_info
-    
