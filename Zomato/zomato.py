@@ -26,6 +26,30 @@ def zomato_scraper(url: str):
     return None
 
 
+def get_place_id(latitude, longitude):
+   
+    url = "https://maps.googleapis.com/maps/api/geocode/json"
+    params = {
+        "latlng": f"{latitude},{longitude}",
+        "key": os.getenv('GOOGLE_API_KEY'),
+    }
+
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("status") == "OK" and data.get("results"):
+            # Extract place ID from the first result
+            place_id = data["results"][0]["place_id"]
+            return place_id
+        else:
+            return f"Error: {data.get('status', 'Unknown error')}"
+
+    except requests.exceptions.RequestException as e:
+        return f"Request failed: {e}"
+
+
 class Item(BaseModel):
     id: str
     name: str
@@ -167,7 +191,7 @@ def get_restaurant_info(response_json: dict):
     data['lat'] = restaurant_json['SECTION_RES_CONTACT']['latitude']
     data['long'] = restaurant_json['SECTION_RES_CONTACT']['longitude']
 
-    data['google_link'] = f'https://www.google.com/maps/dir/?api=1&destination={data["lat"]},{data["long"]}'
+    data['google_place_id'] = get_place_id(data['lat'], data['long'])
     # Contact
     if restaurant_json['SECTION_RES_CONTACT'].get('is_phone_available'):
         data['phone'] = restaurant_json['SECTION_RES_CONTACT']['phoneDetails']['phoneStr']
