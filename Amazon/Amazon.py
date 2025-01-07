@@ -34,7 +34,7 @@ cookies = {
     'amazon.co.uk':'i18n-prefs=GBP;  lc-main=en_GB',
     'amazon.ca':'i18n-prefs=CAD;  lc-main=en_CA',
     'amazon.de':'i18n-prefs=EUR;  lc-main=en_GB',
-    'amazon.fr':'i18n-prefs=EUR;'
+    'amazon.ae':'i18n-prefs=AED;  lc-acbae=en_AE'
 }
 
 country_code = {
@@ -42,7 +42,8 @@ country_code = {
     'amazon.co.uk':'uk',
     'amazon.ca':'ca',
     'amazon.de':'de',
-    'amazon.fr':'fr'
+    'amazon.fr':'fr',
+    'amazon.ae':'ae'
 }
 
 
@@ -142,6 +143,7 @@ def get_reviews_info(soup):
                     for date_formats in POSSIBLE_DATE_FORMAT:
                         try:
                             review["date"] = datetime.strptime(review_date_soup_text.split('on')[1].strip(), date_formats).strftime('%Y-%m-%d')
+                            break
                         except:
                             pass
                         
