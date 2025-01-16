@@ -18,7 +18,7 @@ def zomato_scraper(url: str):
     payload = {
         "url": url,
         "method": "GET",
-        "key": os.getenv('API_KEY'),  # `kW4` is working
+        "key": os.getenv('API_KEY'),  # `kW3` is working
     }
     response = requests.post('https://api.syphoon.com/', json=payload)
     if response.status_code == 200:
@@ -49,6 +49,27 @@ def get_place_id(latitude, longitude):
     except requests.exceptions.RequestException as e:
         return f"Request failed: {e}"
 
+
+def get_place_id_from_address(address):
+    url = "https://maps.googleapis.com/maps/api/geocode/json"
+    params = {
+        "address": address,
+        "key": os.getenv('GOOGLE_API_KEY')
+    }
+
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        if data.get("status") == "OK" and data.get("results"):
+            place_id = data["results"][0]["place_id"]
+            return place_id
+        else:
+            return f"Error: {data.get('status', 'Unknown error')}"
+
+    except requests.exceptions.RequestException as e:
+        return f"Request failed: {e}"
 
 class Item(BaseModel):
     id: str
@@ -191,7 +212,7 @@ def get_restaurant_info(response_json: dict):
     data['lat'] = restaurant_json['SECTION_RES_CONTACT']['latitude']
     data['long'] = restaurant_json['SECTION_RES_CONTACT']['longitude']
 
-    data['google_place_id'] = get_place_id(data['lat'], data['long'])
+    data['google_place_id'] =get_place_id_from_address(f'{data["name"]}, {data["address"]}')
     # Contact
     if restaurant_json['SECTION_RES_CONTACT'].get('is_phone_available'):
         data['phone'] = restaurant_json['SECTION_RES_CONTACT']['phoneDetails']['phoneStr']
