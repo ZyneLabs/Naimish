@@ -1,12 +1,12 @@
 from bs4 import BeautifulSoup
 import json
-from common import send_req_syphoon,findall_text_between,clean_str,MokeRequest
+from common import send_req_syphoon,clean_str
 import requests
 import json
 import jsbeautifier
 import os
 from datetime import datetime
-    
+import traceback
  
 def walmart_scraper(url,filename:str=None):
     if filename:
@@ -278,34 +278,37 @@ def walmart_parser(product_url,html):
     maybe_addon_service = product_json['product'].get('addOnServices','')
     if maybe_addon_service:
         addon_services = []
-        for sevice in maybe_addon_service:
-            sevice_info = {
-                'service_type'  : sevice['serviceType'],
-                'service_title': sevice['serviceTitle'],
-                'service_subtitle': sevice['serviceSubTitle'],
-            } 
+        try:
+            for sevice in maybe_addon_service:
+                sevice_info = {
+                    'service_type'  : sevice['serviceType'],
+                    'service_title': sevice['serviceTitle'],
+                    'service_subtitle': sevice['serviceSubTitle'],
+                } 
 
-            for group in sevice['groups']:
-                if group.get('services',''):
-                    services = []
-                    for option in group['services']:
-                        services.append({
-                            'name' : option['displayName'],
-                            'price' : option['currentPrice']['price']
-                        })
+                for group in sevice['groups']:
+                    if group.get('services',None):
+                        services = []
+                        for option in group['services']:
+                            if option.get('currentPrice'):
+                                services.append({
+                                    'name' : option['displayName'],
+                                    'price' : option['currentPrice']['price']
+                                })
+                        if services:
+                            sevice_info['service_options'] = services
+                    if group.get('nearByStores',''):
+                        nearby_stores = []
+                        for store in group['nearByStores']['nodes']:
+                            nearby_stores.append({
+                                'name' : store['displayName'],
+                                'distance' : store['distance']
+                            })
 
-                    sevice_info['service_options'] = services
-                if group.get('nearByStores',''):
-                    nearby_stores = []
-                    for store in group['nearByStores']['nodes']:
-                        nearby_stores.append({
-                            'name' : store['displayName'],
-                            'distance' : store['distance']
-                        })
-
-                    sevice_info['nearby_stores'] = nearby_stores
-            addon_services.append(sevice_info)
-
+                        sevice_info['nearby_stores'] = nearby_stores
+                addon_services.append(sevice_info)
+        except:
+            print(traceback.format_exc())
         product['addon_services'] = addon_services
     maybe_variant = get_variants(product_json)
 
@@ -330,3 +333,60 @@ def walmart_parser(product_url,html):
 
     details['product_info'] = product
     return details
+
+
+
+def walmart_seller_parser(offer_json : dict):
+    offer_details = {}
+
+    if offer_json.get('data') and offer_json['data'].get('product') and offer_json['data']['product'].get('allOffers'):
+
+        offers = []
+        for offer in offer_json['data']['product']['allOffers']:
+            offer_details['usItemId'] = offer['usItemId']
+
+            offer_detail = {
+                'offerId' : offer['offerId'],
+                'sellerDisplayName' : offer['sellerDisplayName'],
+                'sellerName' : offer['sellerName'],
+                'currentPrice' : offer['priceInfo']['currentPrice']['price'],   
+            }
+
+            if offer['priceInfo'].get('wasPrice'):
+                offer_detail['wasPrice'] = offer['priceInfo']['wasPrice']['price']
+            
+            if offer['priceInfo'].get('unitPrice'):
+                offer_detail['unitPrice'] = offer['priceInfo']['unitPrice']['price']
+
+            if offer.get('discounts'):
+                offer_detail['discounts'] = offer['discounts']
+
+            fullfilments = []
+            for opption in offer['fulfillmentOptions']:
+                if opption.get('availabilityStatus') == 'IN_STOCK':
+                    fullfilment_detail = {
+                        'type' : opption['type'],
+                        'location_text' : opption['locationText'],
+                    }
+                    if opption.get('availableQuantity'):
+                        fullfilment_detail['available_quantity'] = opption['availableQuantity']
+
+                    if opption.get('maxOrderQuantity'):
+                        fullfilment_detail['max_order_quantity'] = opption['maxOrderQuantity']
+                    
+                    if opption.get('orderLimit'):
+                        fullfilment_detail['order_limit'] = opption['orderLimit']
+
+                    fullfilments.append(fullfilment_detail)
+
+            if fullfilments:
+                if len(fullfilments) == 1:
+                    offer_detail['fullfilment'] = ' | '.join([f"{k}: {v}" for k,v in fullfilments[0].items()])
+                else:
+                    offer_detail['fullfilments'] = fullfilments
+
+            offers.append(offer_detail)
+
+        offer_details['offers'] = offers
+
+    return offer_details
