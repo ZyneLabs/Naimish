@@ -26,7 +26,7 @@ class MokeResponse:
 
 # creating a source_dir if not exists
 
-os.mkdir('./source',exist_ok=True)
+os.makedirs('./source',exist_ok=True)
 def walmart_request(url,method,headers={},cookies={},params={},payload={},max_retry=2,cache=True):
     
     # Added cache for debug You can remove it
