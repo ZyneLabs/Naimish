@@ -97,10 +97,10 @@ def parse_property_data(prop: dict) -> dict:
     details["livingArea"] = prop.get("livingArea")
     details["livingAreaUnits"] = prop.get("livingAreaUnits")
     details["yearBuilt"] = prop.get("yearBuilt")
-    if prop.get("responsivePhotos"):
-        details["photos"] = [img['url'] for img in prop.get("responsivePhotos")]
-    else:
+    if prop.get("photos"):
         details["photos"] = [img['mixedSources']['jpeg'][-1]['url'] for img in prop.get("photos")]
+    elif prop.get("responsivePhotos"):
+        details["photos"] = [img['url'] if img.get('url') else img['mixedSources']['jpeg'][-1]['url'] for img in prop.get("responsivePhotos")]
     details["price"] = prop.get("price")
     details["unformattedPrice"] = prop.get("unformattedPrice")
     details["currency"] = prop.get("currency")
