@@ -16,7 +16,7 @@ app = FastAPI()
 
 async def crawl_and_save(url,max_results):
     try:
-        data = await expedia_internal_search_crawler(url,5)
+        data = await expedia_internal_search_crawler(url,max_results)
         await collection.insert_one({"search_url": url, "data": data, "created_at": datetime.now()})
 
     except Exception as e:
